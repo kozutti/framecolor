@@ -34,7 +34,7 @@ for fc_license in \
     install -Dm644 "$fc_source_dir/$fc_license" "$fc_stage_dir/$fc_license"
 done
 install -Dm644 "$fc_source_dir/tools/generate_vulkan_lut.py" "$fc_stage_dir/tools/generate_vulkan_lut.py"
-for fc_doc in README.md README.ja.md EXTERNAL_LUT.ja.md luts/README.md; do
+for fc_doc in README.md README.ja.md EXTERNAL_LUT.md EXTERNAL_LUT.ja.md luts/README.md luts/README.ja.md; do
     install -Dm644 "$fc_source_dir/$fc_doc" "$fc_stage_dir/$fc_doc"
 done
 for fc_lut in "$fc_source_dir"/luts/*.cube; do

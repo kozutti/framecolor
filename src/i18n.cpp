@@ -132,6 +132,35 @@ const std::vector<Language> kLanguages = {
 
 }  // namespace
 
+std::string translateLutMessage(Language lang, const std::string& message) {
+    // The layer writes short ASCII reasons (see effect_lut.cpp and lut_cube.cpp).
+    struct Entry { const char* key; const char* en; const char* ja; };
+    static const Entry kEntries[] = {
+        {"file missing", "file not found", "ファイルが見つかりません"},
+        {"file is not a .cube", "not a .cube file", ".cubeファイルではありません"},
+        {"no file selected", "no file selected", "ファイルが選ばれていません"},
+        {"8-bit format unsupported", "8-bit LUT format unsupported", "8ビット形式に対応していません"},
+        {"8-bit fallback", "8-bit precision", "8ビット精度"},
+        {"Cannot open LUT", "cannot open the file", "ファイルを開けません"},
+        {"LUT line too long", "a line is too long", "長すぎる行があります"},
+        {"LUT size must be 2..65, once only", "LUT size must be 2-65", "サイズは2〜65にしてください"},
+        {"Only domain 0..1 is supported", "only domain 0-1 is supported", "ドメインは0〜1のみ対応しています"},
+        {"Unexpected LUT data", "not a valid LUT file", "LUTの形式が正しくありません"},
+        {"Expected three LUT values", "not a valid LUT file", "LUTの形式が正しくありません"},
+        {"LUT values must be finite and within 0..1", "values must be within 0-1", "値は0〜1の範囲にしてください"},
+        {"Incomplete LUT", "LUT data is incomplete", "LUTのデータが足りません"},
+        {"LUT resample failed", "could not convert the LUT", "LUTを変換できませんでした"},
+        {"invalid enabled value", "lut.txt is invalid", "lut.txtの内容が正しくありません"},
+        {"invalid file name", "lut.txt is invalid", "lut.txtの内容が正しくありません"},
+        {"invalid selection line", "lut.txt is invalid", "lut.txtの内容が正しくありません"},
+        {"missing enabled value", "lut.txt is invalid", "lut.txtの内容が正しくありません"},
+        {"duplicate file", "lut.txt is invalid", "lut.txtの内容が正しくありません"},
+    };
+    for (const auto& entry : kEntries)
+        if (message == entry.key) return lang == Language::Japanese ? entry.ja : entry.en;
+    return message;
+}
+
 std::string Translations::formatSavedToSlot(int slotNumber) const {
     return std::string(savedToSlotPrefix) + std::to_string(slotNumber) + savedToSlotSuffix;
 }

@@ -67,6 +67,10 @@ const std::vector<Language>& availableLanguages();
 /** Get translation table for the specified language. */
 const Translations& getTranslations(Language lang);
 
+/** Translate a detail message written by the Vulkan layer to lut-status.txt.
+ *  Unknown messages are returned unchanged. */
+std::string translateLutMessage(Language lang, const std::string& message);
+
 /** Parse a language code or alias (case-insensitive, e.g. "en", "ja", "ja_JP", "japanese"). */
 Language languageFromCode(const std::string& code);
 

@@ -457,7 +457,8 @@ std::pair<std::string, Color> lutStatusLine(const UiState& ui, const Translation
         case LutStatusState::Unsupported: text = tr.lutStatusUnsupported; color = kRed; break;
     }
     if (ui.lutStatus.state != LutStatusState::Off && !ui.lutStatus.message.empty() && ui.lutStatus.message != "-")
-        text += " (" + ui.lutStatus.message + ")";
+        text += (ui.language == Language::Japanese ? "（" : " (") + translateLutMessage(ui.language, ui.lutStatus.message) +
+                (ui.language == Language::Japanese ? "）" : ")");
     return {text, color};
 }
 

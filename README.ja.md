@@ -5,8 +5,8 @@
 > **これは [beko-kerbecotton/framecolor](https://github.com/beko-kerbecotton/framecolor) の非公式フォークです。** 元作者による公式版ではありません。不具合はこのリポジトリの Issue に報告してください。
 >
 > 元の版からの主な変更：
-> - **色補正LUT**：`~/Documents/FrameColor/luts/` に置いた `.cube` ファイルを、ダッシュボードから選んでON/OFFできます（SteamVRの再起動は不要）。詳しくは [測定LUTライブラリ](EXTERNAL_LUT.ja.md)。
-> - **Quest 3 に色を近づける測定LUT** を同梱しています：[luts/](luts/README.md)
+> - **色補正LUT**：`~/Documents/FrameColor/luts/` に置いた `.cube` ファイルを、ダッシュボードから選んでON/OFFできます（SteamVRの再起動は不要）。詳しくは [色補正LUT](EXTERNAL_LUT.ja.md)。
+> - **Quest 3 に色を近づける測定LUT** を同梱しています：[luts/](luts/README.ja.md)
 > - 元リポジトリに出されていた2件のPR（[#1 Vulkanレイヤーのクラッシュ修正](https://github.com/beko-kerbecotton/framecolor/pull/1)、[#2 英語・日本語の切り替え](https://github.com/beko-kerbecotton/framecolor/pull/2)、いずれも brugr さん作）を取り込んでいます。
 >
 > 元の版と同じ場所にインストールされるので、元の版の上から入れると置き換わります。
@@ -103,9 +103,9 @@ SSHからは次のコマンドを使えます．
 
 `disable` はVulkan補正とダッシュボードを無効にし，`enable` は両方を有効にします．どちらもSteamVRを再起動します．`disable` では保存済みの調整値とプリセットは削除されません．画面が見づらくなった場合は，SSHから `disable` を実行してください．
 
-### 測定LUT
+### 色補正LUT
 
-`.cube` を `~/Documents/FrameColor/luts/` に置き、ダッシュボード上部の「色補正LUT」から選択してON/OFFできます。選択すると自動でONになり、切替はSteamVRを起動したまま反映されます。`~/.local/bin/framecolor-lut` には `list`、`select`、`on`、`off`、`status`、`validate`、`install` があります。RGBスライダーとプリセットはLUT適用後に反映されます。測定LUT単体を確認するときは「標準」プリセットに戻してください。詳しくは[測定LUTライブラリ](EXTERNAL_LUT.ja.md)を参照してください。
+`.cube` を `~/Documents/FrameColor/luts/` に置き、ダッシュボード上部の「色補正LUT」から選択してON/OFFできます。選択すると自動でONになり、切替はSteamVRを起動したまま反映されます。`~/.local/bin/framecolor-lut` には `list`、`select`、`on`、`off`、`status`、`validate`、`install` があります。RGBスライダーとプリセットはLUT適用後に反映されます。測定LUT単体を確認するときは「標準」プリセットに戻してください。詳しくは[色補正LUT](EXTERNAL_LUT.ja.md)を参照してください。
 
 SteamVRが起動開始から10秒未満で異常終了した場合，起動ガードは標準で1回の失敗後にVulkanレイヤーを無効化します．原因がFrameColorとは限りません．3回連続の失敗まで待つ設定にもできます．
 
