@@ -447,7 +447,9 @@ bool lutStatusMatchesSelection(const UiState& ui) {
 std::pair<std::string, Color> lutStatusLine(const UiState& ui, const Translations& tr) {
     using vkBasalt::LutStatusState;
     if (!ui.vulkanLayerActive) return {tr.lutLayerInactive, kMuted};
-    if (ui.lutPending) return {tr.lutPending, kMuted};
+    // Until the layer reports the current selection (it only polls while the
+    // compositor draws frames), show "switching" rather than a stale state.
+    if (ui.lutPending || !lutStatusMatchesSelection(ui)) return {tr.lutPending, kMuted};
     std::string text;
     Color color = kMuted;
     switch (ui.lutStatus.state) {
