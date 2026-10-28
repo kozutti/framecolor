@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <fstream>
 
 namespace {
@@ -212,6 +213,18 @@ Language loadSavedLanguage(const std::filesystem::path& configDir) {
     std::string code;
     if (in >> code && !code.empty()) {
         return languageFromCode(code);
+    }
+    // Not chosen yet: follow the Steam client language ("language" "japanese"
+    // in ~/.steam/registry.vdf). The Frame's system locale stays en_US even
+    // when Steam itself is in Japanese.
+    const char* home = std::getenv("HOME");
+    if (home != nullptr) {
+        std::ifstream registry(std::filesystem::path(home) / ".steam" / "registry.vdf");
+        std::string line;
+        while (std::getline(registry, line)) {
+            if (line.find("\"language\"") != std::string::npos)
+                return line.find("\"japanese\"") != std::string::npos ? Language::Japanese : Language::English;
+        }
     }
     return Language::English;
 }

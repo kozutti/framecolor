@@ -6,7 +6,7 @@
 >
 > Changes from the original:
 > - **Color LUT**: pick `.cube` files placed in `~/Documents/FrameColor/luts/` and switch them on/off from the dashboard, live (no SteamVR restart). See [Color LUTs](EXTERNAL_LUT.md).
-> - Includes a **measured LUT that brings the Frame's colors closer to a Quest 3**: [luts/](luts/README.md)
+> - Includes a **measured LUT that brings the Frame's colors closer to a Quest 3**, switched on automatically on a first install: [luts/](luts/README.md)
 > - Merges the two pull requests opened on the original repository ([#1 Vulkan layer chaining crash fix](https://github.com/beko-kerbecotton/framecolor/pull/1) and [#2 English/Japanese UI](https://github.com/beko-kerbecotton/framecolor/pull/2), both by brugr).
 >
 > It installs to the same locations as the original and replaces it if installed on top.

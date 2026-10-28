@@ -6,7 +6,7 @@
 >
 > 元の版からの主な変更：
 > - **色補正LUT**：`~/Documents/FrameColor/luts/` に置いた `.cube` ファイルを、ダッシュボードから選んでON/OFFできます（SteamVRの再起動は不要）。詳しくは [色補正LUT](EXTERNAL_LUT.ja.md)。
-> - **Quest 3 に色を近づける測定LUT** を同梱しています：[luts/](luts/README.ja.md)
+> - **Quest 3 に色を近づける測定LUT** を同梱し、初めてのインストールでは自動でONになります：[luts/](luts/README.ja.md)
 > - 元リポジトリに出されていた2件のPR（[#1 Vulkanレイヤーのクラッシュ修正](https://github.com/beko-kerbecotton/framecolor/pull/1)、[#2 英語・日本語の切り替え](https://github.com/beko-kerbecotton/framecolor/pull/2)、いずれも brugr さん作）を取り込んでいます。
 >
 > 元の版と同じ場所にインストールされるので、元の版の上から入れると置き換わります。

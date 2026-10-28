@@ -9,10 +9,9 @@ It was computed from measurements of both headsets taken with a SpyderX and Argy
 
 ### Usage
 
-Installing FrameColor (this fork) puts this file in `~/Documents/FrameColor/luts/`. It is not switched on automatically.
+Installing FrameColor (this fork) puts this file in `~/Documents/FrameColor/luts/`, and a first install switches it on automatically.
 
-1. Open "Display Color Adjustment" in the SteamVR dashboard.
-2. In the Color LUT card at the top, choose `quest3-match-v1.cube`. Choosing it switches it on.
+To switch it on or off, open "Display Color Adjustment" in the SteamVR dashboard and use the Color LUT card at the top.
 
 To add it by hand, copy this file to `~/Documents/FrameColor/luts/` on the Frame, or run: `~/.local/bin/framecolor-lut install quest3-match-v1.cube`
 

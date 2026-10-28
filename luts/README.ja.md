@@ -9,10 +9,9 @@ SpyderX と ArgyllCMS（`spotread`）で両機の表示色を実測し、そこ�
 
 ### 使い方
 
-FrameColor（この改造版）をインストールすると、このファイルは `~/Documents/FrameColor/luts/` に入ります。自動では ON になりません。
+FrameColor（この改造版）をインストールすると、このファイルは `~/Documents/FrameColor/luts/` に入り、初めてのインストールでは自動で ON になります。
 
-1. SteamVR ダッシュボードで「ディスプレイ色調整」を開きます。
-2. 上部の「色補正LUT」で `quest3-match-v1.cube` を選びます。選ぶと ON になります。
+ON/OFF や切り替えは、SteamVR ダッシュボードの「ディスプレイ色調整」を開き、上部の「色補正LUT」で行います。
 
 手動で入れる場合は、このファイルを Frame の `~/Documents/FrameColor/luts/` にコピーします。コマンドでも入れられます：`~/.local/bin/framecolor-lut install quest3-match-v1.cube`
 

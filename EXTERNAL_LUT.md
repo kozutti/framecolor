@@ -14,7 +14,7 @@ Put `.cube` files in this folder. The installer or the dashboard creates it if i
 
 In the Color LUT card at the top of the dashboard, the ON/OFF button switches the LUT, and `<` `>` choose a file. Choosing a file switches it on. The folder is checked every 2 seconds, so new files show up almost immediately. Changes take effect within about a second, without restarting SteamVR. The top-right corner shows the state: Applied, Off (original colors), Error, and so on.
 
-Installing adds the bundled measured LUT `quest3-match-v1.cube` (brings the colors closer to a Quest 3) to this folder. It is not switched on automatically. See [luts/README.md](luts/README.md) for details.
+Installing adds the bundled measured LUT `quest3-match-v1.cube` (brings the colors closer to a Quest 3) to this folder. On a first install it is selected and switched on. If you already chose a LUT (or switched it off), that setting is kept. See [luts/README.md](luts/README.md) for details.
 
 Brightness, saturation, contrast, and gamma adjustments are applied on top of the selected LUT. To see the LUT alone, select the Standard preset. Panel brightness is a separate setting.
 

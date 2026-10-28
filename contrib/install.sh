@@ -63,8 +63,8 @@ install -Dm644 "$fc_source_dir/contrib/90-framecolor.conf" "$fc_unit_dir/steamvr
 install -d -m 700 "$fc_config_dir"
 install -d -m 755 "$fc_data_dir/layer"
 install -d -m 755 "$fc_lut_dir"
-# Bundled LUTs are offered in the dashboard list but not switched on.
-# Existing files with the same name are left untouched.
+# Bundled LUTs are copied into the library; existing files with the same
+# name are left untouched.
 for fc_bundled_lut in "$fc_source_dir"/luts/*.cube; do
     [ -f "$fc_bundled_lut" ] || continue
     [ -e "$fc_lut_dir/${fc_bundled_lut##*/}" ] || install -m 644 "$fc_bundled_lut" "$fc_lut_dir/${fc_bundled_lut##*/}"
@@ -80,6 +80,19 @@ if [ -f "$fc_config_dir/external-lut.cube" ] && [ ! -e "$fc_config_dir/lut.txt" 
     printf 'enabled 1\nfile %s\n' "$fc_migrated_name" > "$fc_lut_temp"
     mv -f "$fc_lut_temp" "$fc_config_dir/lut.txt"
     printf 'Migrated the legacy external LUT into %s.\n' "$fc_lut_dir/$fc_migrated_name"
+fi
+
+# First install: switch the first bundled LUT on so correction works out of
+# the box. An existing selection, including OFF, is never changed.
+if [ ! -e "$fc_config_dir/lut.txt" ]; then
+    for fc_bundled_lut in "$fc_source_dir"/luts/*.cube; do
+        [ -f "$fc_bundled_lut" ] || continue
+        fc_lut_temp="$fc_config_dir/lut.txt.tmp.$$"
+        printf 'enabled 1\nfile %s\n' "${fc_bundled_lut##*/}" > "$fc_lut_temp"
+        mv -f "$fc_lut_temp" "$fc_config_dir/lut.txt"
+        printf 'Enabled the bundled LUT %s.\n' "${fc_bundled_lut##*/}"
+        break
+    done
 fi
 
 if [ ! -f "$fc_config_dir/current.txt" ]; then
