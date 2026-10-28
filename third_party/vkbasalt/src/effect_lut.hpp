@@ -14,9 +14,12 @@
 
 #include "effect_simple.hpp"
 #include "config.hpp"
+#include "stable_file_change.hpp"
 
 namespace vkBasalt
 {
+    class LutCube;
+
     class LutEffect : public SimpleEffect
     {
     public:
@@ -38,9 +41,20 @@ namespace vkBasalt
         VkDescriptorPool      lutDescriptorPool;
         VkDescriptorSet       lutDescriptorSet;
         uint32_t              lutSize = 0;
+        bool                  externalLut = false;
+        VkFormat              lutFormat = VK_FORMAT_R8G8B8A8_UNORM;
+        std::vector<std::array<float, 3>> externalBaseRgb;
+        std::vector<unsigned char> externalBasePixels;
+        std::string externalLutPath;
+        StableFileChangeDetector externalLutChangeDetector;
+        bool                  externalLutDeletionLogged = false;
+        std::chrono::steady_clock::time_point nextExternalLutCheck{};
         bool                  hasFrameColorValues = false;
         std::array<float, 12> frameColorValues{};
         std::chrono::steady_clock::time_point nextFrameColorCheck{};
+
+        void setExternalBase(const LutCube& cube, const unsigned char* pixels, uint32_t pixelBytes);
+        void checkExternalLutFile(std::chrono::steady_clock::time_point now);
     };
 } // namespace vkBasalt
 

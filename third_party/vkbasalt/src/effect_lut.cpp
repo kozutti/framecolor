@@ -17,11 +17,27 @@
 #include "sampler.hpp"
 #include "image.hpp"
 #include "lut_cube.hpp"
+#include "look_transform.hpp"
 
 #include "shader_sources.hpp"
 
 namespace vkBasalt
 {
+    namespace
+    {
+        VkFormat selectExternalLutFormat(LogicalDevice* device)
+        {
+            VkFormatProperties properties{};
+            device->vki.GetPhysicalDeviceFormatProperties(device->physicalDevice,
+                VK_FORMAT_R16G16B16A16_UNORM, &properties);
+            const auto required = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
+                                  VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+            return (properties.optimalTilingFeatures & required) == required
+                ? VK_FORMAT_R16G16B16A16_UNORM
+                : VK_FORMAT_R8G8B8A8_UNORM;
+        }
+    } // namespace
+
     LutEffect::LutEffect(LogicalDevice*       pLogicalDevice,
                          VkFormat             format,
                          VkExtent2D           imageExtent,
@@ -34,10 +50,40 @@ namespace vkBasalt
 
         std::string lutFile = pConfig->lutFile();
 
+        const char* home = std::getenv("HOME");
+        const char* xdg = std::getenv("XDG_CONFIG_HOME");
+        const std::string root = xdg && *xdg ? xdg : std::string(home ? home : "/tmp") + "/.config";
+        const std::string externalPath = root + "/framecolor/external-lut.cube";
+        // External mode is fixed for this session. Switching requires restart.
+        if (std::ifstream(externalPath).good())
+        {
+            lutFile = externalPath;
+            externalLutPath = externalPath;
+            externalLut = true;
+        }
+
         // FrameColor generates only .cube LUTs; PNG/image loaders are omitted.
         LutCube lutCube(lutFile);
+        if (!lutCube.valid)
+            Logger::err("Invalid LUT; using identity: " + lutCube.error);
         int32_t height = lutCube.size;
         const unsigned char* pixels = lutCube.colorCube.data();
+        lutFormat = VK_FORMAT_R8G8B8A8_UNORM;
+        uint32_t pixelBytes = 4;
+        if (externalLut)
+        {
+            lutFormat = selectExternalLutFormat(pLogicalDevice);
+            if (lutFormat == VK_FORMAT_R16G16B16A16_UNORM)
+            {
+                pixelBytes = 8;
+                pixels = reinterpret_cast<const unsigned char*>(lutCube.colorCube16.data());
+                Logger::warn("external LUT active (16-bit); sliders layered on top");
+            }
+            else
+                Logger::warn("FrameColor external LUT active with 8-bit fallback: 16-bit filtering unsupported");
+        }
+        if (externalLut)
+            setExternalBase(lutCube, pixels, pixelBytes);
         VkSpecializationMapEntry specMapEntry{0, 0, sizeof(int32_t)};
 
         VkSpecializationInfo fragmentSpecializationInfo;
@@ -55,14 +101,21 @@ namespace vkBasalt
         lutImage = createImages(pLogicalDevice,
                                 1,
                                 lutImageExtent,
-                                VK_FORMAT_R8G8B8A8_UNORM, // TODO search for format and save it
+                                lutFormat,
                                 VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
                                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                                 lutMemory)[0];
 
-        uploadToImage(pLogicalDevice, lutImage, lutImageExtent, height * height * height * 4, pixels);
+        uploadToImage(pLogicalDevice, lutImage, lutImageExtent, height * height * height * pixelBytes, pixels);
+        if (externalLut)
+        {
+            FileStamp stamp{};
+            if (readFileStamp(externalLutPath, stamp) == FileStampResult::Available)
+                externalLutChangeDetector.initialize(stamp);
+            nextExternalLutCheck = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+        }
 
-        lutImageView = createImageViews(pLogicalDevice, VK_FORMAT_R8G8B8A8_UNORM, std::vector<VkImage>(1, lutImage), VK_IMAGE_VIEW_TYPE_3D)[0];
+        lutImageView = createImageViews(pLogicalDevice, lutFormat, std::vector<VkImage>(1, lutImage), VK_IMAGE_VIEW_TYPE_3D)[0];
 
         lutDescriptorSetLayout = createImageSamplerDescriptorSetLayout(pLogicalDevice, 1);
         descriptorSetLayouts.push_back(lutDescriptorSetLayout);
@@ -92,6 +145,97 @@ namespace vkBasalt
         pLogicalDevice->vkd.DestroyDescriptorPool(pLogicalDevice->device, lutDescriptorPool, nullptr);
         pLogicalDevice->vkd.FreeMemory(pLogicalDevice->device, lutMemory, nullptr);
     }
+
+    void LutEffect::setExternalBase(const LutCube& cube, const unsigned char* pixels, uint32_t pixelBytes)
+    {
+        const size_t nodeCount = static_cast<size_t>(cube.size) * cube.size * cube.size;
+        externalBasePixels.assign(pixels, pixels + nodeCount * pixelBytes);
+        externalBaseRgb.clear();
+        externalBaseRgb.reserve(nodeCount);
+        if (lutFormat == VK_FORMAT_R16G16B16A16_UNORM)
+        {
+            const auto* words = reinterpret_cast<const uint16_t*>(pixels);
+            for (size_t node = 0; node < nodeCount; ++node)
+            {
+                externalBaseRgb.push_back({{words[node * 4] / 65535.0f, words[node * 4 + 1] / 65535.0f,
+                                            words[node * 4 + 2] / 65535.0f}});
+            }
+        }
+        else
+        {
+            for (size_t node = 0; node < nodeCount; ++node)
+            {
+                externalBaseRgb.push_back({{pixels[node * 4] / 255.0f, pixels[node * 4 + 1] / 255.0f,
+                                            pixels[node * 4 + 2] / 255.0f}});
+            }
+        }
+    }
+
+    void LutEffect::checkExternalLutFile(std::chrono::steady_clock::time_point now)
+    {
+        if (!externalLut || now < nextExternalLutCheck)
+            return;
+
+        FileStamp stamp{};
+        const FileStampResult result = readFileStamp(externalLutPath, stamp);
+        if (result == FileStampResult::Missing)
+        {
+            externalLutChangeDetector.cancelCandidate();
+            if (!externalLutDeletionLogged)
+            {
+                Logger::warn("FrameColor external LUT was deleted; keeping the current LUT");
+                externalLutDeletionLogged = true;
+            }
+            nextExternalLutCheck = now + std::chrono::milliseconds(500);
+            return;
+        }
+        if (result == FileStampResult::Error)
+        {
+            nextExternalLutCheck = now + std::chrono::milliseconds(500);
+            return;
+        }
+
+        externalLutDeletionLogged = false;
+        if (!externalLutChangeDetector.observe(stamp, now))
+        {
+            // A changed stamp gets a second sample after 200 ms. Ordinary
+            // filesystem polling remains throttled to 500 ms.
+            nextExternalLutCheck = now + (externalLutChangeDetector.waitingForStableSample()
+                ? std::chrono::milliseconds(200)
+                : std::chrono::milliseconds(500));
+            return;
+        }
+
+        LutCube replacement(externalLutPath);
+        std::string rejection;
+        if (!replacement.valid)
+            rejection = "invalid LUT";
+        else if (replacement.size != static_cast<int>(lutSize))
+            rejection = "LUT size changed";
+        else if (selectExternalLutFormat(pLogicalDevice) != lutFormat)
+            rejection = "LUT format support changed";
+
+        if (!rejection.empty())
+        {
+            Logger::warn("FrameColor external LUT reload rejected (" + rejection + "); keeping the current LUT");
+        }
+        else
+        {
+            const uint32_t pixelBytes = lutFormat == VK_FORMAT_R16G16B16A16_UNORM ? 8 : 4;
+            const unsigned char* pixels = lutFormat == VK_FORMAT_R16G16B16A16_UNORM
+                ? reinterpret_cast<const unsigned char*>(replacement.colorCube16.data())
+                : replacement.colorCube.data();
+            setExternalBase(replacement, pixels, pixelBytes);
+            hasFrameColorValues = false;
+
+            pLogicalDevice->vkd.QueueWaitIdle(pLogicalDevice->queue);
+            uploadToImage(pLogicalDevice, lutImage, {lutSize, lutSize, lutSize},
+                          static_cast<uint32_t>(externalBasePixels.size()), externalBasePixels.data(), 1, true);
+            Logger::info("FrameColor external LUT reloaded");
+        }
+        nextExternalLutCheck = now + std::chrono::milliseconds(500);
+    }
+
     void LutEffect::applyEffect(uint32_t imageIndex, VkCommandBuffer commandBuffer)
     {
         pLogicalDevice->vkd.CmdBindDescriptorSets(
@@ -102,6 +246,7 @@ namespace vkBasalt
     {
         // The dashboard writes current.txt during slider drags and on release.
         const auto now = std::chrono::steady_clock::now();
+        checkExternalLutFile(now);
         if (now < nextFrameColorCheck)
             return;
         nextFrameColorCheck = now + std::chrono::milliseconds(50);
@@ -128,6 +273,64 @@ namespace vkBasalt
             return;
         if (hasFrameColorValues && values == frameColorValues)
             return;
+
+        if (externalLut)
+        {
+            const bool neutral = isNeutralLook(values);
+            if (neutral)
+            {
+                // The initial upload is already the exact base. After a prior
+                // adjustment, restore its original encoded nodes bit-for-bit.
+                if (!hasFrameColorValues || isNeutralLook(frameColorValues))
+                {
+                    frameColorValues = values;
+                    hasFrameColorValues = true;
+                    return;
+                }
+                pLogicalDevice->vkd.QueueWaitIdle(pLogicalDevice->queue);
+                uploadToImage(pLogicalDevice, lutImage, {lutSize, lutSize, lutSize},
+                              static_cast<uint32_t>(externalBasePixels.size()), externalBasePixels.data(), 1, true);
+                frameColorValues = values;
+                hasFrameColorValues = true;
+                Logger::info("FrameColor live LUT updated");
+                return;
+            }
+
+            const size_t nodeCount = externalBaseRgb.size();
+            if (lutFormat == VK_FORMAT_R16G16B16A16_UNORM)
+            {
+                std::vector<uint16_t> pixels(nodeCount * 4, 65535);
+                for (size_t node = 0; node < nodeCount; ++node)
+                {
+                    const auto rgb = applyLookTransform(externalBaseRgb[node], values);
+                    for (size_t channel = 0; channel < 3; ++channel)
+                        pixels[node * 4 + channel] = static_cast<uint16_t>(std::lround(
+                            std::clamp(rgb[channel], 0.0f, 1.0f) * 65535.0f));
+                }
+                pLogicalDevice->vkd.QueueWaitIdle(pLogicalDevice->queue);
+                uploadToImage(pLogicalDevice, lutImage, {lutSize, lutSize, lutSize},
+                              static_cast<uint32_t>(pixels.size() * sizeof(uint16_t)),
+                              reinterpret_cast<const unsigned char*>(pixels.data()), 1, true);
+            }
+            else
+            {
+                std::vector<unsigned char> pixels(nodeCount * 4, 255);
+                for (size_t node = 0; node < nodeCount; ++node)
+                {
+                    const auto rgb = applyLookTransform(externalBaseRgb[node], values);
+                    for (size_t channel = 0; channel < 3; ++channel)
+                        pixels[node * 4 + channel] = static_cast<unsigned char>(std::lround(
+                            std::clamp(rgb[channel], 0.0f, 1.0f) * 255.0f));
+                }
+                pLogicalDevice->vkd.QueueWaitIdle(pLogicalDevice->queue);
+                uploadToImage(pLogicalDevice, lutImage, {lutSize, lutSize, lutSize},
+                              static_cast<uint32_t>(pixels.size()), pixels.data(), 1, true);
+            }
+            frameColorValues = values;
+            hasFrameColorValues = true;
+            Logger::info("FrameColor live LUT updated");
+            return;
+        }
 
         std::array<std::array<unsigned char, 65>, 3> curves{};
         for (uint32_t channel = 0; channel < 3; ++channel)

@@ -92,6 +92,10 @@ You can also use these commands over SSH:
 
 `disable` turns off both Vulkan correction and the dashboard; `enable` turns them back on. Both commands restart SteamVR. `disable` does not delete saved adjustments or presets. If the display becomes hard to see, run `disable` over SSH.
 
+### External LUT mode
+
+If `~/.config/framecolor/external-lut.cube` exists when SteamVR starts, FrameColor uses it as the base LUT. Replacing that file while the layer is already running in external mode reloads it automatically within about one second. RGB sliders and presets are applied after the LUT. The default and リセット (Reset) RGB values are neutral (gain and gamma at 1.00, contrast at 0%, and saturation at 100%), so they leave the external LUT unchanged. Non-neutral settings change the measured result, so select リセット before verification or measurement. Restart SteamVR only when switching between slider mode and external-LUT mode. Keep panel brightness at the measurement value.
+
 If SteamVR fails and exits within 10 seconds of starting, the startup guard disables the Vulkan layer after one failure by default. The failure may have a cause unrelated to FrameColor. You can instead allow up to three consecutive failures:
 
 ```sh

@@ -1,124 +1,89 @@
 #include "lut_cube.hpp"
-
-#include "logger.hpp"
-
+#include <array>
+#include <cmath>
+#include <fstream>
+#include <sstream>
+#include <stdexcept>
 namespace vkBasalt
 {
     LutCube::LutCube()
     {
+        for (int b = 0; b < 2; ++b)
+            for (int g = 0; g < 2; ++g)
+                for (int r = 0; r < 2; ++r)
+                    for (int c : {r, g, b, 1})
+                    {
+                        colorCube.push_back(static_cast<unsigned char>(c * 255));
+                        colorCube16.push_back(static_cast<uint16_t>(c * 65535));
+                    }
     }
-    LutCube::LutCube(const std::string& file)
+    LutCube::LutCube(const std::string& file) : LutCube()
     {
-        std::ifstream cubeStream(file);
-        if (!cubeStream.good())
+        try
         {
-            Logger::err("lut cube file does not exist");
-        }
-
-        std::string line;
-
-        while (std::getline(cubeStream, line))
-        {
-            parseLine(line);
-        }
-    }
-    void LutCube::parseLine(std::string line)
-    {
-        if (line.length() == 0)
-        {
-            return;
-        }
-        if (line[0] == '#')
-        {
-            return;
-        }
-        if (line.find("LUT_3D_SIZE") != std::string::npos)
-        {
-            line = line.substr(line.find("LUT_3D_SIZE") + 11);
-            line = skipWhiteSpace(line);
-            size = std::stoi(line);
-
-            colorCube = std::vector<unsigned char>(size * size * size * 4, 255);
-            return;
-        }
-        if (line.find("DOMAIN_MIN") != std::string::npos)
-        {
-            line = line.substr(line.find("DOMAIN_MIN") + 10);
-            splitTripel(line, minX, minY, minZ);
-            return;
-        }
-        if (line.find("DOMAIN_MAX") != std::string::npos)
-        {
-            line = line.substr(line.find("DOMAIN_MAX") + 10);
-            splitTripel(line, maxX, maxY, maxZ);
-            return;
-        }
-        if (line.find_first_of("0123456789") == 0)
-        {
-            float         x, y, z;
-            unsigned char outX, outY, outZ;
-            splitTripel(line, x, y, z);
-            clampTripel(x, y, z, outX, outY, outZ);
-            writeColor(currentX, currentY, currentZ, outX, outY, outZ);
-            if (currentX != size - 1)
+            std::ifstream input(file);
+            if (!input) throw std::runtime_error("Cannot open LUT");
+            int parsedSize = 0;
+            bool seenMin = false, seenMax = false;
+            std::vector<std::array<float, 3>> rows;
+            std::string line;
+            while (std::getline(input, line))
             {
-                currentX++;
+                if (line.size() > 4096) throw std::runtime_error("LUT line too long");
+                const auto comment = line.find('#');
+                if (comment != std::string::npos) line.erase(comment);
+                std::istringstream stream(line);
+                std::string key, extra;
+                if (!(stream >> key)) continue;
+                if (key == "TITLE") continue;
+                if (key == "LUT_3D_SIZE")
+                {
+                    if (parsedSize || !(stream >> parsedSize) || parsedSize < 2 || parsedSize > 65 || stream >> extra)
+                        throw std::runtime_error("LUT size must be 2..65, once only");
+                    continue;
+                }
+                if (key == "DOMAIN_MIN" || key == "DOMAIN_MAX")
+                {
+                    bool& seen = key == "DOMAIN_MIN" ? seenMin : seenMax;
+                    float a, b, c, expected = key == "DOMAIN_MIN" ? 0.0f : 1.0f;
+                    if (seen || !(stream >> a >> b >> c) || a != expected || b != expected || c != expected || stream >> extra)
+                        throw std::runtime_error("Only domain 0..1 is supported");
+                    seen = true;
+                    continue;
+                }
+                if (!parsedSize || rows.size() >= static_cast<size_t>(parsedSize * parsedSize * parsedSize))
+                    throw std::runtime_error("Unexpected LUT data");
+                std::istringstream values(line);
+                std::array<float, 3> row;
+                if (!(values >> row[0] >> row[1] >> row[2]) || values >> extra)
+                    throw std::runtime_error("Expected three LUT values");
+                for (float value : row)
+                    if (!std::isfinite(value) || value < 0 || value > 1)
+                        throw std::runtime_error("LUT values must be finite and within 0..1");
+                rows.push_back(row);
             }
-            else if (currentY != size - 1)
+            if (!parsedSize || rows.size() != static_cast<size_t>(parsedSize * parsedSize * parsedSize))
+                throw std::runtime_error("Incomplete LUT");
+            std::vector<unsigned char> bytes;
+            std::vector<uint16_t> words;
+            for (const auto& row : rows)
             {
-                currentY++;
-                currentX = 0;
+                for (float value : row)
+                {
+                    bytes.push_back(static_cast<unsigned char>(std::lround(value * 255)));
+                    words.push_back(static_cast<uint16_t>(std::lround(value * 65535)));
+                }
+                bytes.push_back(255);
+                words.push_back(65535);
             }
-            else if (currentZ != size - 1)
-            {
-                currentZ++;
-                currentX = 0;
-                currentY = 0;
-            }
-            return;
+            size = parsedSize;
+            colorCube = std::move(bytes);
+            colorCube16 = std::move(words);
+            valid = true;
         }
-    }
-
-    std::string LutCube::skipWhiteSpace(std::string text)
-    {
-        while (text.size() > 0 && (text[0] == ' ' || text[0] == '\t'))
+        catch (const std::exception& exception)
         {
-            text = text.substr(1);
+            error = exception.what();
         }
-        return text;
     }
-
-    void LutCube::splitTripel(std::string tripel, float& x, float& y, float& z)
-    {
-        tripel       = skipWhiteSpace(tripel);
-        size_t after = tripel.find_first_of(" \n");
-        x            = std::stof(tripel.substr(0, after));
-        tripel       = tripel.substr(after);
-
-        tripel = skipWhiteSpace(tripel);
-        after  = tripel.find_first_of(" \n");
-        y      = std::stof(tripel.substr(0, after));
-        tripel = tripel.substr(after);
-
-        tripel = skipWhiteSpace(tripel);
-        z      = std::stof(tripel);
-    }
-
-    void LutCube::clampTripel(float x, float y, float z, unsigned char& outX, unsigned char& outY, unsigned char& outZ)
-    {
-        outX = (unsigned char) 255 * (x / (maxX - minX));
-        outY = (unsigned char) 255 * (y / (maxY - minY));
-        outZ = (unsigned char) 255 * (z / (maxZ - minZ));
-    }
-
-    void LutCube::writeColor(int x, int y, int z, unsigned char r, unsigned char g, unsigned char b)
-    {
-        static const int colorSize = 4; // 4 bytes per point in the cube, rgba
-
-        int locationR = (((z * size) + y) * size + x) * colorSize;
-
-        colorCube[locationR + 0] = r;
-        colorCube[locationR + 1] = g;
-        colorCube[locationR + 2] = b;
-    }
-} // namespace vkBasalt
+}

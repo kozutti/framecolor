@@ -73,6 +73,7 @@ struct UiState {
     bool saveMode = false;
     bool lookDirty = false;
     bool vulkanLayerActive = false;
+    bool externalLut = false;
     std::string message;
     bool messageIsError = false;
 };
@@ -563,6 +564,7 @@ int main() {
     const std::filesystem::path dataRoot = dataHome && *dataHome ? dataHome :
         std::filesystem::path(home ? home : "/tmp") / ".local/share";
     ui.vulkanLayerActive = std::filesystem::exists(dataRoot / "framecolor/layer/vkBasalt.json");
+    ui.externalLut = std::filesystem::exists(presetPath().parent_path() / "external-lut.cube");
     setSetting("contrast", 0.0, ui);
     neutralizeLegacyStreamGains(ui);
     auto lastLookSave = std::chrono::steady_clock::now();
