@@ -34,6 +34,12 @@ for fc_license in \
     install -Dm644 "$fc_source_dir/$fc_license" "$fc_stage_dir/$fc_license"
 done
 install -Dm644 "$fc_source_dir/tools/generate_vulkan_lut.py" "$fc_stage_dir/tools/generate_vulkan_lut.py"
+for fc_doc in README.md README.ja.md EXTERNAL_LUT.ja.md luts/README.md; do
+    install -Dm644 "$fc_source_dir/$fc_doc" "$fc_stage_dir/$fc_doc"
+done
+for fc_lut in "$fc_source_dir"/luts/*.cube; do
+    if [ -f "$fc_lut" ]; then install -Dm644 "$fc_lut" "$fc_stage_dir/luts/${fc_lut##*/}"; fi
+done
 for fc_name in install.sh uninstall.sh framecolor-guard framecolorctl framecolor-lut framecolor.service 90-framecolor.conf; do
     install -Dm644 "$fc_source_dir/contrib/$fc_name" "$fc_stage_dir/contrib/$fc_name"
 done

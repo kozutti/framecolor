@@ -63,6 +63,12 @@ install -Dm644 "$fc_source_dir/contrib/90-framecolor.conf" "$fc_unit_dir/steamvr
 install -d -m 700 "$fc_config_dir"
 install -d -m 755 "$fc_data_dir/layer"
 install -d -m 755 "$fc_lut_dir"
+# Bundled LUTs are offered in the dashboard list but not switched on.
+# Existing files with the same name are left untouched.
+for fc_bundled_lut in "$fc_source_dir"/luts/*.cube; do
+    [ -f "$fc_bundled_lut" ] || continue
+    [ -e "$fc_lut_dir/${fc_bundled_lut##*/}" ] || install -m 644 "$fc_bundled_lut" "$fc_lut_dir/${fc_bundled_lut##*/}"
+done
 
 if [ -f "$fc_config_dir/external-lut.cube" ] && [ ! -e "$fc_config_dir/lut.txt" ]; then
     fc_migrated_name=migrated-external-lut.cube
