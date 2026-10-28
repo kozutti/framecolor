@@ -7,7 +7,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check scripts
         run: |
-          sh -n contrib/install.sh contrib/uninstall.sh contrib/package.sh contrib/framecolor-lut
+          sh -n contrib/install.sh contrib/uninstall.sh contrib/package.sh contrib/framecolor-lut contrib/get.sh
           sh -n contrib/framecolorctl contrib/framecolor-guard
           sh -n tests/test_guard.sh tests/test_framecolorctl.sh tests/test_framecolor_lut.sh tests/run_look_test.sh
           sh tests/test_guard.sh

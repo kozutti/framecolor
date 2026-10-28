@@ -35,4 +35,7 @@ if [ "$fc_was_enabled" = true ]; then
     systemctl --user restart steamvr.service
 fi
 rmdir "$fc_config_dir" 2>/dev/null || true
+# Package kept by get.sh. This script may be running from it, which is fine on Linux.
+rm -rf "$HOME/.local/share/framecolor-package"
 printf 'FrameColor files and saved settings were removed. SteamVR settings changed by the dashboard may remain.\n'
+printf 'LUT files in ~/Documents/FrameColor/luts were kept.\n'

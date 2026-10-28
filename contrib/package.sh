@@ -40,7 +40,7 @@ done
 for fc_lut in "$fc_source_dir"/luts/*.cube; do
     if [ -f "$fc_lut" ]; then install -Dm644 "$fc_lut" "$fc_stage_dir/luts/${fc_lut##*/}"; fi
 done
-for fc_name in install.sh uninstall.sh framecolor-guard framecolorctl framecolor-lut framecolor.service 90-framecolor.conf; do
+for fc_name in get.sh install.sh uninstall.sh framecolor-guard framecolorctl framecolor-lut framecolor.service 90-framecolor.conf; do
     install -Dm644 "$fc_source_dir/contrib/$fc_name" "$fc_stage_dir/contrib/$fc_name"
 done
 install -d "$fc_source_dir/dist"
@@ -49,3 +49,8 @@ fc_archive="$fc_source_dir/dist/$fc_archive_name"
 tar -czf "$fc_archive" -C "$fc_temp_dir" framecolor
 (cd "$fc_source_dir/dist" && sha256sum "$fc_archive_name" > "$fc_archive_name.sha256")
 printf 'Created %s and %s.sha256\n' "$fc_archive" "$fc_archive"
+# Unversioned copies for releases/latest/download, used by get.sh.
+cp "$fc_archive" "$fc_source_dir/dist/framecolor-steamframe-aarch64.tar.gz"
+(cd "$fc_source_dir/dist" && sha256sum framecolor-steamframe-aarch64.tar.gz > framecolor-steamframe-aarch64.tar.gz.sha256)
+install -m644 "$fc_source_dir/contrib/get.sh" "$fc_source_dir/dist/get.sh"
+printf 'Release assets: the two archives with .sha256 files, and get.sh\n'

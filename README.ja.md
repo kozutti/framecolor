@@ -22,12 +22,31 @@ Steam Frame専用です．色補正はSteamVRの `vrcompositor` に読み込ま�
 ## 必要要件
 
 - Steam Frame（SteamOS，ARM64）と，標準の `/opt/steamvr` にあるSteamVR
-- 開発者モードとSSH接続．アーカイブをSteam Frameに転送してコマンドを実行できること
-- Steam Frame側のPython 3.10以降（インストール時のLUT生成に使用）
+- Steam Frame上でコマンドを1行実行できること（デスクトップモードの「Konsole」，またはPCからSSH接続）
 
-配布アーカイブにはSteam Frame用のビルド済みバイナリが含まれます．ソースからビルドする場合に必要なツールは「開発」を参照してください．
+インストールに使うPython 3は，SteamOSに最初から入っています．配布アーカイブにはSteam Frame用のビルド済みバイナリが含まれます．ソースからビルドする場合に必要なツールは「開発」を参照してください．
 
 ## インストール
+
+### かんたんインストール（おすすめ）
+
+Steam Frame上で次の1行を実行します．デスクトップモードの「Konsole」で実行するか，PCからSSHで接続して実行してください．
+
+```sh
+curl -fsSL https://github.com/kozutti/framecolor/releases/latest/download/get.sh | sh
+```
+
+これだけで，最新版のダウンロード，チェックサムの確認，インストール，補正の有効化までを行い，SteamVRを再起動します．同梱の色補正LUT（`quest3-match-v1.cube`）も初回は自動でONになります．`sudo` は不要です．
+
+**更新**するときも，同じ1行を実行します．調整値・プリセット・LUTの選択はそのまま残ります．以前に `framecolorctl disable` で補正を止めていた場合，更新しても止めたままです．
+
+**アンインストール**するときは，次を実行します．LUTフォルダー（`~/Documents/FrameColor/luts`）のファイルは残ります．
+
+```sh
+sh ~/.local/share/framecolor-package/contrib/uninstall.sh
+```
+
+### 手動でインストールする場合
 
 GitHub Releasesから `framecolor-VERSION-steamframe-aarch64.tar.gz` を入手してください．チェックサムを確認する場合は，同名の `.sha256` ファイルも入手します．以下の `VERSION` と `FRAME_IP` は，ダウンロードした版とSteam FrameのIPアドレスに置き換えます．
 

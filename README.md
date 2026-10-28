@@ -22,12 +22,31 @@ FrameColor is for Steam Frame only. Color correction is applied by a Vulkan laye
 ## Requirements
 
 - A Steam Frame (SteamOS, ARM64) using the stock SteamVR installation at `/opt/steamvr`
-- Developer Mode and SSH access, so you can transfer the archive to the Steam Frame and run commands on it
-- Python 3.10 or later on the Steam Frame, used to generate the LUT during installation
+- A way to run one command on the Steam Frame (Konsole in desktop mode, or SSH from your PC)
 
-The release archive includes binaries built for Steam Frame. See “Development” for the tools needed to build from source.
+Python 3, used during installation, comes with SteamOS. The release archive includes binaries built for Steam Frame. See “Development” for the tools needed to build from source.
 
 ## Installation
+
+### Quick install (recommended)
+
+Run this one line on the Steam Frame, either in Konsole in desktop mode or over SSH from your PC:
+
+```sh
+curl -fsSL https://github.com/kozutti/framecolor/releases/latest/download/get.sh | sh
+```
+
+It downloads the latest release, verifies its checksum, installs it, turns the correction on, and restarts SteamVR. The bundled color LUT (`quest3-match-v1.cube`) is also switched on for a first install. No `sudo` is needed.
+
+To **update**, run the same line again. Adjustments, presets, and the LUT choice are kept. If you turned the correction off with `framecolorctl disable`, it stays off after updating.
+
+To **uninstall**, run the following. Files in the LUT folder (`~/Documents/FrameColor/luts`) are kept.
+
+```sh
+sh ~/.local/share/framecolor-package/contrib/uninstall.sh
+```
+
+### Manual installation
 
 Download `framecolor-VERSION-steamframe-aarch64.tar.gz` from GitHub Releases. If you want to verify its checksum, also download the matching `.sha256` file. Replace `VERSION` and `FRAME_IP` below with the release version and your Steam Frame's IP address.
 
