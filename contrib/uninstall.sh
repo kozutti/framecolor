@@ -19,6 +19,9 @@ systemctl --user disable --now framecolor.service >/dev/null 2>&1 || true
 
 rm -f "$fc_unit_dir/framecolor.service" "$fc_unit_dir/steamvr.service.d/90-framecolor.conf"
 rm -f "$HOME/.local/bin/framecolor" "$HOME/.local/bin/framecolorctl"
+rm -f "$HOME/.local/bin/framecolor-lut"
+rm -f "$fc_config_dir/external-lut.cube"
+# Backups of measured LUTs are deliberately retained.
 rm -f "$HOME/.local/libexec/framecolor-guard"
 rm -f "$fc_data_dir/layer/vkBasalt.json.disabled" "$fc_data_dir/lib/libvkbasalt.so"
 rm -f "$fc_data_dir/framecolor.cube" "$fc_data_dir/vkBasalt.conf"

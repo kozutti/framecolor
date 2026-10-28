@@ -69,6 +69,7 @@ struct UiState {
     bool saveMode = false;
     bool lookDirty = false;
     bool vulkanLayerActive = false;
+    bool externalLut = false;
     std::string message;
 };
 
@@ -361,7 +362,8 @@ void render(const FontSet& fonts, const UiState& ui, double pointerX, double poi
     slider(p, hits, 590, "ガンマ",
            selectedArrayValue(ui.values.gamma, ui.channel), 0.50, 2.50, 3, ui.vulkanLayerActive);
 
-    if (!ui.message.empty()) p.text(45, 680, ui.message, 20, ui.message.find("失敗") == std::string::npos ? kGreen : kRed);
+    if (ui.externalLut) p.text(45, 680, "外部LUTモード：RGB調整は外部LUT適用後に重ねて反映／測定時のパネル輝度を維持してください", 20, kGreen);
+    else if (!ui.message.empty()) p.text(45, 680, ui.message, 20, ui.message.find("失敗") == std::string::npos ? kGreen : kRed);
 
     if (ui.channelOpen) {
         fillRect(p, 885, 307, 270, 224, kBg, 10); strokeRect(p, 885, 307, 270, 224, kAccent, 10);
@@ -431,6 +433,7 @@ int main() {
     const std::filesystem::path dataRoot = dataHome && *dataHome ? dataHome :
         std::filesystem::path(home ? home : "/tmp") / ".local/share";
     ui.vulkanLayerActive = std::filesystem::exists(dataRoot / "framecolor/layer/vkBasalt.json");
+    ui.externalLut = std::filesystem::exists(presetPath().parent_path() / "external-lut.cube");
     setSetting("contrast", 0.0, ui);
     neutralizeLegacyStreamGains(ui);
     auto lastLookSave = std::chrono::steady_clock::now();

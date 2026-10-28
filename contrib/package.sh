@@ -34,7 +34,7 @@ for fc_license in \
     install -Dm644 "$fc_source_dir/$fc_license" "$fc_stage_dir/$fc_license"
 done
 install -Dm644 "$fc_source_dir/tools/generate_vulkan_lut.py" "$fc_stage_dir/tools/generate_vulkan_lut.py"
-for fc_name in install.sh uninstall.sh framecolor-guard framecolorctl framecolor.service 90-framecolor.conf; do
+for fc_name in install.sh uninstall.sh framecolor-guard framecolorctl framecolor-lut framecolor.service 90-framecolor.conf; do
     install -Dm644 "$fc_source_dir/contrib/$fc_name" "$fc_stage_dir/contrib/$fc_name"
 done
 install -d "$fc_source_dir/dist"

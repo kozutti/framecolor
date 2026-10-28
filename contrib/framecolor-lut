@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+"""Validated external LUT installation. No network; no implicit restart."""
+import argparse
+import json
+import math
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import time
+
+
+def validate(path):
+    size, count = None, 0
+    seen = set()
+    if path.stat().st_size > 32 * 1024 * 1024:
+        raise ValueError("LUT exceeds 32 MB")
+    for line in path.read_text(encoding="ascii").splitlines():
+        if len(line) > 4096:
+            raise ValueError("Line too long")
+        fields = line.split("#", 1)[0].split()
+        if not fields or fields[0] == "TITLE":
+            continue
+        key = fields[0]
+        if key == "LUT_3D_SIZE":
+            if size is not None or len(fields) != 2:
+                raise ValueError("Repeated/malformed size")
+            size = int(fields[1])
+            if not 2 <= size <= 65:
+                raise ValueError("Size must be 2..65")
+        elif key in ("DOMAIN_MIN", "DOMAIN_MAX"):
+            expected = 0 if key == "DOMAIN_MIN" else 1
+            if key in seen or list(map(float, fields[1:])) != [expected] * 3:
+                raise ValueError("Domain must be 0..1")
+            seen.add(key)
+        else:
+            if size is None or len(fields) != 3:
+                raise ValueError("Unexpected LUT row")
+            values = list(map(float, fields))
+            if not all(math.isfinite(v) and 0 <= v <= 1 for v in values):
+                raise ValueError("Values must be finite and within 0..1")
+            count += 1
+            if count > size ** 3:
+                raise ValueError("Too many rows")
+    if size is None or count != size ** 3:
+        raise ValueError("Incomplete LUT")
+    return size
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("action", choices=["install", "disable", "status", "validate"])
+    p.add_argument("file", nargs="?")
+    p.add_argument("--restart", action="store_true")
+    args = p.parse_args()
+    root = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "framecolor"
+    active = root / "external-lut.cube"
+    if args.action in ("install", "validate"):
+        if not args.file:
+            p.error("file required")
+        source = Path(args.file)
+        size = validate(source)
+        if args.action == "validate":
+            print(f"Valid {size}^3 LUT")
+            return
+        root.mkdir(parents=True, exist_ok=True)
+        if active.exists():
+            shutil.copy2(active, root / f"external-lut.backup-{time.time_ns()}.cube")
+        temp = root / "external-lut.cube.tmp"
+        shutil.copyfile(source, temp)
+        validate(temp)
+        os.replace(temp, active)
+        print("External LUT installed. A running external-LUT session reloads replacements automatically. --restart is only needed when switching between slider mode and external-LUT mode.")
+    elif args.action == "disable":
+        if active.exists():
+            active.rename(root / f"external-lut.disabled-{time.time_ns()}.cube")
+        print("External mode disabled. Saved slider settings are retained.")
+    else:
+        print(json.dumps({"external_on_next_restart": active.exists(), "path": str(active)}))
+        return
+    if args.restart:
+        subprocess.run(["systemctl", "--user", "restart", "steamvr.service"], check=True)
+    elif args.action == "install":
+        print("RGB sliders and presets layer after the LUT. Neutral values use the LUT as-is; reset to neutral for measurement. Panel brightness still applies.")
+    else:
+        print("Restart SteamVR to switch back to slider mode: systemctl --user restart steamvr.service")
+
+
+if __name__ == "__main__":
+    main()
