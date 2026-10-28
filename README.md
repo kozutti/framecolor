@@ -1,6 +1,17 @@
-# FrameColor
+# FrameColor (unofficial fork)
 
 [日本語](README.ja.md)
+
+> **This is an unofficial fork of [beko-kerbecotton/framecolor](https://github.com/beko-kerbecotton/framecolor)**, not the original author's release. Please report problems in this repository's issues.
+>
+> Changes from the original:
+> - **Color LUT**: pick `.cube` files placed in `~/Documents/FrameColor/luts/` and switch them on/off from the dashboard, live (no SteamVR restart). See [Measured LUT library](EXTERNAL_LUT.ja.md) (Japanese).
+> - Includes a **measured LUT that brings the Frame's colors closer to a Quest 3**: [luts/](luts/README.md)
+> - Merges the two pull requests opened on the original repository ([#1 Vulkan layer chaining crash fix](https://github.com/beko-kerbecotton/framecolor/pull/1) and [#2 English/Japanese UI](https://github.com/beko-kerbecotton/framecolor/pull/2), both by brugr).
+>
+> It installs to the same locations as the original and replaces it if installed on top.
+
+![Dashboard](docs/dashboard-en.png)
 
 ## Overview
 
@@ -92,9 +103,9 @@ You can also use these commands over SSH:
 
 `disable` turns off both Vulkan correction and the dashboard; `enable` turns them back on. Both commands restart SteamVR. `disable` does not delete saved adjustments or presets. If the display becomes hard to see, run `disable` over SSH.
 
-### External LUT mode
+### Measured LUTs
 
-If `~/.config/framecolor/external-lut.cube` exists when SteamVR starts, FrameColor uses it as the base LUT. Replacing that file while the layer is already running in external mode reloads it automatically within about one second. RGB sliders and presets are applied after the LUT. The default and リセット (Reset) RGB values are neutral (gain and gamma at 1.00, contrast at 0%, and saturation at 100%), so they leave the external LUT unchanged. Non-neutral settings change the measured result, so select リセット before verification or measurement. Restart SteamVR only when switching between slider mode and external-LUT mode. Keep panel brightness at the measurement value.
+Drop `.cube` files into `~/Documents/FrameColor/luts/`, then select one and toggle it live from the Color LUT card at the top of the dashboard. Selecting a file enables it. `~/.local/bin/framecolor-lut` also provides `list`, `select`, `on`, `off`, `status`, `validate`, and `install` commands. LUT changes do not need a SteamVR restart. RGB sliders and presets are applied after the LUT; return to the Standard preset to check the measured LUT by itself. See [Measured LUT library](EXTERNAL_LUT.ja.md) for details.
 
 If SteamVR fails and exits within 10 seconds of starting, the startup guard disables the Vulkan layer after one failure by default. The failure may have a cause unrelated to FrameColor. You can instead allow up to three consecutive failures:
 

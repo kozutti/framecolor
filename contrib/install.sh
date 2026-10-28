@@ -4,6 +4,7 @@ set -eu
 
 fc_source_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 fc_config_dir="$HOME/.config/framecolor"
+fc_lut_dir="$HOME/Documents/FrameColor/luts"
 fc_data_dir="$HOME/.local/share/framecolor"
 fc_unit_dir="$HOME/.config/systemd/user"
 fc_bin_dir="$HOME/.local/bin"
@@ -61,6 +62,19 @@ install -Dm644 "$fc_source_dir/contrib/framecolor.service" "$fc_unit_dir/frameco
 install -Dm644 "$fc_source_dir/contrib/90-framecolor.conf" "$fc_unit_dir/steamvr.service.d/90-framecolor.conf"
 install -d -m 700 "$fc_config_dir"
 install -d -m 755 "$fc_data_dir/layer"
+install -d -m 755 "$fc_lut_dir"
+
+if [ -f "$fc_config_dir/external-lut.cube" ] && [ ! -e "$fc_config_dir/lut.txt" ]; then
+    fc_migrated_name=migrated-external-lut.cube
+    if [ -e "$fc_lut_dir/$fc_migrated_name" ]; then
+        fc_migrated_name="migrated-external-lut-$(date +%s)-$$.cube"
+    fi
+    install -m 644 "$fc_config_dir/external-lut.cube" "$fc_lut_dir/$fc_migrated_name"
+    fc_lut_temp="$fc_config_dir/lut.txt.tmp.$$"
+    printf 'enabled 1\nfile %s\n' "$fc_migrated_name" > "$fc_lut_temp"
+    mv -f "$fc_lut_temp" "$fc_config_dir/lut.txt"
+    printf 'Migrated the legacy external LUT into %s.\n' "$fc_lut_dir/$fc_migrated_name"
+fi
 
 if [ ! -f "$fc_config_dir/current.txt" ]; then
     printf '0 0 0 1 1 1 1 1 1 1 1 1\n' > "$fc_config_dir/current.txt"

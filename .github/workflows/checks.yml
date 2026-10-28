@@ -7,10 +7,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check scripts
         run: |
-          sh -n contrib/install.sh contrib/uninstall.sh contrib/package.sh
+          sh -n contrib/install.sh contrib/uninstall.sh contrib/package.sh contrib/framecolor-lut
           sh -n contrib/framecolorctl contrib/framecolor-guard
-          sh -n tests/test_guard.sh tests/test_framecolorctl.sh
+          sh -n tests/test_guard.sh tests/test_framecolorctl.sh tests/test_framecolor_lut.sh tests/run_look_test.sh
           sh tests/test_guard.sh
           sh tests/test_framecolorctl.sh
+          sh tests/test_framecolor_lut.sh
+          sh tests/run_look_test.sh
       - name: Test LUT generator
         run: python3 -m unittest discover -s tests -v

@@ -1,20 +1,61 @@
-#!/usr/bin/env python3
-"""Validated external LUT installation. No network; no implicit restart."""
-import argparse
-import json
+#!/bin/sh
+# Manage FrameColor's live measured-LUT selection and library.
+set -eu
+
+fc_home=${HOME:-}
+[ -n "$fc_home" ] || { printf 'HOME is not set.\n' >&2; exit 1; }
+fc_config_home=${XDG_CONFIG_HOME:-"$fc_home/.config"}
+fc_config_dir="$fc_config_home/framecolor"
+fc_control_file="$fc_config_dir/lut.txt"
+fc_status_file="$fc_config_dir/lut-status.txt"
+fc_library="$fc_home/Documents/FrameColor/luts"
+
+fc_usage() {
+    printf 'Usage: framecolor-lut list|select NAME|on|off|disable|status|install FILE|validate FILE [--restart]\n' >&2
+    exit 2
+}
+
+[ "$#" -ge 1 ] || fc_usage
+fc_action=$1
+shift
+fc_restart=0
+fc_argument=
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --restart) fc_restart=1 ;;
+        *)
+            [ -z "$fc_argument" ] || fc_usage
+            fc_argument=$1
+            ;;
+    esac
+    shift
+done
+
+fc_safe_name() {
+    python3 - "$1" <<'PY'
+import sys
+name = sys.argv[1]
+valid = bool(name) and name not in (".", "..") and not name.startswith(".")
+valid = valid and "/" not in name and "\\" not in name
+valid = valid and name.lower().endswith(".cube")
+valid = valid and all(ord(char) >= 32 and ord(char) != 127 for char in name)
+sys.exit(0 if valid else 1)
+PY
+}
+
+fc_validate() {
+    python3 - "$1" <<'PY'
 import math
-import os
-from pathlib import Path
-import shutil
-import subprocess
-import time
+import pathlib
+import sys
 
-
-def validate(path):
-    size, count = None, 0
-    seen = set()
+path = pathlib.Path(sys.argv[1])
+try:
     if path.stat().st_size > 32 * 1024 * 1024:
         raise ValueError("LUT exceeds 32 MB")
+    size = None
+    count = 0
+    seen = set()
     for line in path.read_text(encoding="ascii").splitlines():
         if len(line) > 4096:
             raise ValueError("Line too long")
@@ -24,67 +65,154 @@ def validate(path):
         key = fields[0]
         if key == "LUT_3D_SIZE":
             if size is not None or len(fields) != 2:
-                raise ValueError("Repeated/malformed size")
+                raise ValueError("Repeated or malformed size")
             size = int(fields[1])
             if not 2 <= size <= 65:
                 raise ValueError("Size must be 2..65")
         elif key in ("DOMAIN_MIN", "DOMAIN_MAX"):
-            expected = 0 if key == "DOMAIN_MIN" else 1
-            if key in seen or list(map(float, fields[1:])) != [expected] * 3:
+            expected = 0.0 if key == "DOMAIN_MIN" else 1.0
+            if key in seen or len(fields) != 4:
+                raise ValueError("Malformed domain")
+            values = [float(value) for value in fields[1:]]
+            if values != [expected] * 3:
                 raise ValueError("Domain must be 0..1")
             seen.add(key)
         else:
             if size is None or len(fields) != 3:
                 raise ValueError("Unexpected LUT row")
-            values = list(map(float, fields))
-            if not all(math.isfinite(v) and 0 <= v <= 1 for v in values):
+            values = [float(value) for value in fields]
+            if not all(math.isfinite(value) and 0 <= value <= 1 for value in values):
                 raise ValueError("Values must be finite and within 0..1")
             count += 1
             if count > size ** 3:
                 raise ValueError("Too many rows")
     if size is None or count != size ** 3:
         raise ValueError("Incomplete LUT")
-    return size
+except (OSError, UnicodeError, ValueError) as error:
+    print(f"Invalid LUT: {error}", file=sys.stderr)
+    sys.exit(1)
+print(size)
+PY
+}
 
+fc_read_selection() {
+    fc_enabled=0
+    fc_name=
+    fc_has_enabled=0
+    fc_has_file=0
+    [ -f "$fc_control_file" ] || return 0
+    while IFS= read -r fc_line || [ -n "$fc_line" ]; do
+        case "$fc_line" in
+            'enabled 0'|'enabled 1')
+                [ "$fc_has_enabled" -eq 0 ] || return 1
+                fc_has_enabled=1
+                [ "$fc_line" = 'enabled 1' ] && fc_enabled=1
+                ;;
+            'file '* )
+                [ "$fc_has_file" -eq 0 ] || return 1
+                fc_has_file=1
+                fc_name=${fc_line#file }
+                fc_safe_name "$fc_name" || return 1
+                ;;
+            *) return 1 ;;
+        esac
+    done < "$fc_control_file"
+    [ "$fc_has_enabled" -eq 1 ]
+}
 
-def main():
-    p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("action", choices=["install", "disable", "status", "validate"])
-    p.add_argument("file", nargs="?")
-    p.add_argument("--restart", action="store_true")
-    args = p.parse_args()
-    root = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "framecolor"
-    active = root / "external-lut.cube"
-    if args.action in ("install", "validate"):
-        if not args.file:
-            p.error("file required")
-        source = Path(args.file)
-        size = validate(source)
-        if args.action == "validate":
-            print(f"Valid {size}^3 LUT")
-            return
-        root.mkdir(parents=True, exist_ok=True)
-        if active.exists():
-            shutil.copy2(active, root / f"external-lut.backup-{time.time_ns()}.cube")
-        temp = root / "external-lut.cube.tmp"
-        shutil.copyfile(source, temp)
-        validate(temp)
-        os.replace(temp, active)
-        print("External LUT installed. A running external-LUT session reloads replacements automatically. --restart is only needed when switching between slider mode and external-LUT mode.")
-    elif args.action == "disable":
-        if active.exists():
-            active.rename(root / f"external-lut.disabled-{time.time_ns()}.cube")
-        print("External mode disabled. Saved slider settings are retained.")
-    else:
-        print(json.dumps({"external_on_next_restart": active.exists(), "path": str(active)}))
-        return
-    if args.restart:
-        subprocess.run(["systemctl", "--user", "restart", "steamvr.service"], check=True)
-    elif args.action == "install":
-        print("RGB sliders and presets layer after the LUT. Neutral values use the LUT as-is; reset to neutral for measurement. Panel brightness still applies.")
-    else:
-        print("Restart SteamVR to switch back to slider mode: systemctl --user restart steamvr.service")
+fc_write_selection() {
+    fc_next_enabled=$1
+    fc_next_name=$2
+    mkdir -p "$fc_config_dir"
+    umask 077
+    fc_temp=$(mktemp "$fc_config_dir/lut.txt.tmp.XXXXXX")
+    {
+        printf 'enabled %s\n' "$fc_next_enabled"
+        if [ -n "$fc_next_name" ]; then
+            printf 'file %s\n' "$fc_next_name"
+        fi
+    } > "$fc_temp"
+    mv -f "$fc_temp" "$fc_control_file"
+}
 
+fc_list() {
+    [ -d "$fc_library" ] || return 0
+    for fc_path in "$fc_library"/*; do
+        [ -e "$fc_path" ] || continue
+        [ -f "$fc_path" ] || continue
+        [ ! -L "$fc_path" ] || continue
+        fc_name=${fc_path##*/}
+        case "$fc_name" in .*) continue ;; esac
+        fc_lower=$(printf '%s' "$fc_name" | tr '[:upper:]' '[:lower:]')
+        case "$fc_lower" in *.cube) printf '%s\n' "$fc_name" ;; esac
+    done | LC_ALL=C sort | sed -n '1,64p'
+}
 
-if __name__ == "__main__":
-    main()
+fc_restart_if_requested() {
+    if [ "$fc_restart" -eq 1 ]; then
+        systemctl --user restart steamvr.service
+    fi
+}
+
+case "$fc_action" in
+    list)
+        [ -z "$fc_argument" ] || fc_usage
+        fc_list
+        ;;
+    select)
+        [ -n "$fc_argument" ] || fc_usage
+        fc_safe_name "$fc_argument" || { printf 'Invalid LUT basename.\n' >&2; exit 2; }
+        fc_source="$fc_library/$fc_argument"
+        [ -f "$fc_source" ] && [ ! -L "$fc_source" ] || {
+            printf 'LUT not found in the library: %s\n' "$fc_argument" >&2
+            exit 1
+        }
+        fc_write_selection 1 "$fc_argument"
+        printf 'Selected %s and enabled it.\n' "$fc_argument"
+        fc_restart_if_requested
+        ;;
+    on)
+        [ -z "$fc_argument" ] || fc_usage
+        fc_read_selection || { printf 'Invalid lut.txt selection.\n' >&2; exit 1; }
+        fc_write_selection 1 "$fc_name"
+        printf 'Measured LUT enabled.\n'
+        fc_restart_if_requested
+        ;;
+    off|disable)
+        [ -z "$fc_argument" ] || fc_usage
+        fc_read_selection || { printf 'Invalid lut.txt selection.\n' >&2; exit 1; }
+        fc_write_selection 0 "$fc_name"
+        printf 'Measured LUT disabled.\n'
+        fc_restart_if_requested
+        ;;
+    status)
+        [ -z "$fc_argument" ] || fc_usage
+        printf '[lut.txt]\n'
+        if [ -f "$fc_control_file" ]; then cat "$fc_control_file"; else printf '(missing)\n'; fi
+        printf '[lut-status.txt]\n'
+        if [ -f "$fc_status_file" ]; then cat "$fc_status_file"; else printf '(missing)\n'; fi
+        fc_restart_if_requested
+        ;;
+    install)
+        [ -n "$fc_argument" ] || fc_usage
+        fc_size=$(fc_validate "$fc_argument") || exit 1
+        fc_name=${fc_argument##*/}
+        fc_safe_name "$fc_name" || { printf 'Input filename must be a safe .cube basename.\n' >&2; exit 2; }
+        mkdir -p "$fc_library"
+        umask 077
+        fc_temp=$(mktemp "$fc_library/.framecolor-lut.XXXXXX")
+        cp "$fc_argument" "$fc_temp"
+        fc_validate "$fc_temp" >/dev/null
+        mv -f "$fc_temp" "$fc_library/$fc_name"
+        fc_write_selection 1 "$fc_name"
+        printf 'Installed and enabled %s (%s^3).\n' "$fc_name" "$fc_size"
+        fc_restart_if_requested
+        ;;
+    validate)
+        [ -n "$fc_argument" ] || fc_usage
+        fc_size=$(fc_validate "$fc_argument") || exit 1
+        printf 'Valid %s^3 LUT.\n' "$fc_size"
+        fc_restart_if_requested
+        ;;
+    *) fc_usage ;;
+esac

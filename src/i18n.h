@@ -32,6 +32,20 @@ struct Translations {
     const char* contrast;                       // Contrast slider label
     const char* gamma;                          // Gamma slider label
 
+    const char* measuredLut;                    // Measured LUT card title
+    const char* lutOn;                          // Enabled state label
+    const char* lutOff;                         // Disabled state label
+    const char* lutNoSelection;                 // Empty LUT selection label
+    const char* lutPending;                     // Selection written, layer has not answered yet
+    const char* lutNoFiles;                     // Empty LUT library label
+    const char* lutFolderHint;                  // Where to put .cube files
+    const char* lutLayerInactive;               // Vulkan layer is not installed/active
+    const char* lutStatusActive;                // Layer reports an active LUT
+    const char* lutStatusOff;                   // Layer reports LUT correction off
+    const char* lutStatusError;                 // Layer reports a LUT error
+    const char* lutStatusUnsupported;           // Layer reports unsupported LUT format
+    const char* lutWriteError;                  // Could not save LUT selection
+
     const char* errorSaveSettings;  // Error prefix when saving SteamVR analogGain setting fails
     const char* applied;            // Success message when a setting is applied
     const char* errorSaveAdvanced;  // Error message when writing current.txt fails

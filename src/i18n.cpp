@@ -34,6 +34,21 @@ Translations createEnglish() {
     t.contrast = "Contrast";
     t.gamma = "Gamma";
 
+    // Measured LUT library
+    t.measuredLut = "Color LUT";
+    t.lutOn = "ON";
+    t.lutOff = "OFF";
+    t.lutNoSelection = "No LUT selected";
+    t.lutPending = "Switching...";
+    t.lutNoFiles = "No LUT files";
+    t.lutFolderHint = "Put .cube files in Documents/FrameColor/luts (checked every 2 s)";
+    t.lutLayerInactive = "Unavailable: Vulkan correction is not enabled";
+    t.lutStatusActive = "Applied";
+    t.lutStatusOff = "Off (original colors)";
+    t.lutStatusError = "Error";
+    t.lutStatusUnsupported = "Not supported on this GPU";
+    t.lutWriteError = "Could not save LUT selection";
+
     // Status & Feedback Messages
     t.errorSaveSettings = "Failed to save settings: ";
     t.applied = "Applied";
@@ -76,6 +91,21 @@ Translations createJapanese() {
     t.saturation = "彩度";
     t.contrast = "コントラスト";
     t.gamma = "ガンマ";
+
+    // Measured LUT library
+    t.measuredLut = "色補正LUT";
+    t.lutOn = "ON";
+    t.lutOff = "OFF";
+    t.lutNoSelection = "LUT未選択";
+    t.lutPending = "切り替え中…";
+    t.lutNoFiles = "LUTファイルがありません";
+    t.lutFolderHint = "Documents/FrameColor/luts フォルダーに .cube ファイルを入れてください（2秒ごとに確認）";
+    t.lutLayerInactive = "使用できません：Vulkan補正が有効になっていません";
+    t.lutStatusActive = "適用中";
+    t.lutStatusOff = "OFF（元の色）";
+    t.lutStatusError = "エラー";
+    t.lutStatusUnsupported = "このGPUでは使えません";
+    t.lutWriteError = "LUT選択を保存できません";
 
     // Status & Feedback Messages
     t.errorSaveSettings = "設定の保存に失敗: ";

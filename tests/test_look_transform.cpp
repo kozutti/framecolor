@@ -1,4 +1,5 @@
 #include "look_transform.hpp"
+#include "lut_control.hpp"
 #include "stable_file_change.hpp"
 
 #include <array>
@@ -81,6 +82,70 @@ namespace
             return false;
         return true;
     }
+
+    bool testsLutSelectionParsing()
+    {
+        const auto valid = vkBasalt::parseLutSelection("enabled 1\nfile q2f-c-gamma.cube\n");
+        if (!valid.valid || !valid.enabled || valid.file != "q2f-c-gamma.cube")
+            return false;
+        const auto empty = vkBasalt::parseLutSelection("enabled 0\n");
+        if (!empty.valid || empty.enabled || !empty.file.empty())
+            return false;
+        for (const char* invalid : {"enabled 1\nfile ../escape.cube\n",
+                                    "enabled 1\nfile folder\\escape.cube\n",
+                                    "enabled 1\nfile /tmp/escape.cube\n",
+                                    "enabled 1\nfile .\n",
+                                    "enabled 1\nfile ..\n",
+                                    "enabled 1\nfile \n"})
+            if (vkBasalt::parseLutSelection(invalid).valid)
+                return false;
+        return true;
+    }
+
+    bool testsLutResampling()
+    {
+        const auto identity = vkBasalt::makeIdentityLutCube(5);
+        const auto resampledIdentity = vkBasalt::resampleLutCube(identity, 33);
+        if (resampledIdentity.size != 33 || resampledIdentity.values.size() != 33u * 33u * 33u)
+            return false;
+        for (int blue = 0; blue < 33; ++blue)
+            for (int green = 0; green < 33; ++green)
+                for (int red = 0; red < 33; ++red)
+                {
+                    const auto& value = resampledIdentity.values[(blue * 33 + green) * 33 + red];
+                    if (!close(value[0], red / 32.0, 1.0e-6) ||
+                        !close(value[1], green / 32.0, 1.0e-6) ||
+                        !close(value[2], blue / 32.0, 1.0e-6))
+                        return false;
+                }
+
+        const auto twoCube = vkBasalt::makeIdentityLutCube(2);
+        const auto resampled = vkBasalt::resampleLutCube(twoCube, 33);
+        for (int blue : {0, 32})
+            for (int green : {0, 32})
+                for (int red : {0, 32})
+                {
+                    const auto& value = resampled.values[(blue * 33 + green) * 33 + red];
+                    if (value != std::array<float, 3>{{red == 0 ? 0.0f : 1.0f,
+                                                       green == 0 ? 0.0f : 1.0f,
+                                                       blue == 0 ? 0.0f : 1.0f}})
+                        return false;
+                }
+        return true;
+    }
+
+    bool testsLutStatusFormatting()
+    {
+        const vkBasalt::LutStatus status{vkBasalt::LutStatusState::Active, "q2f-c-gamma.cube", "ready"};
+        const std::string formatted = vkBasalt::formatLutStatus(status);
+        if (formatted != "state active\nfile q2f-c-gamma.cube\nmessage ready\n")
+            return false;
+        vkBasalt::LutStatus parsed;
+        if (!vkBasalt::parseLutStatus(formatted, parsed) || parsed != status)
+            return false;
+        return vkBasalt::formatLutStatus({vkBasalt::LutStatusState::Error, "../bad.cube", "bad\npath"}) ==
+               "state error\nfile -\nmessage bad?path\n";
+    }
 }
 
 int main()
@@ -123,6 +188,22 @@ int main()
         return 1;
     }
 
-    std::puts("look transform and stable file change tests passed");
+    if (!testsLutSelectionParsing())
+    {
+        std::fputs("LUT selection parser accepted an unsafe name or rejected a valid selection\n", stderr);
+        return 1;
+    }
+    if (!testsLutResampling())
+    {
+        std::fputs("LUT resampling did not preserve identity and exact corners\n", stderr);
+        return 1;
+    }
+    if (!testsLutStatusFormatting())
+    {
+        std::fputs("LUT status formatting did not round trip safely\n", stderr);
+        return 1;
+    }
+
+    std::puts("look transform, LUT control, resampling, and stable file change tests passed");
     return 0;
 }

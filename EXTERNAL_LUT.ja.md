@@ -1,25 +1,45 @@
-# VRColor用の外部LUT拡張（実機検証前）
+# 測定LUTライブラリ
 
-元のFrameColorに次の変更を追加しています。
+FrameColorは、測定した `.cube` LUTをSteamVRダッシュボードから選び、SteamVRを起動したまま有効・無効にできます。
 
-- `~/.config/framecolor/external-lut.cube` がSteamVR起動時に存在すれば外部LUTモードになります。起動後にLUTを置き換えた場合も、約1秒以内に自動で再読込します。スライダーやプリセットのRGB調整は外部LUT適用後に重ねて反映されます。
-- 16ビットUNORMのフィルター・転送対応を確認し、対応時は16ビットでLUTを保持。非対応は8ビットへ戻しログを出します。
-- 起動時の破損LUTは恒等LUTを使用します。起動後の置換ファイルが破損・サイズ違い・形式非対応の場合は現在のLUTを維持して警告します。対応形式はサイズ2〜65、ドメイン0〜1、有限値0〜1の標準3D `.cube` です。
-- ダッシュボードに外部LUTモードを表示します。RGB調整の初期値と「リセット」後の値は標準値（明るさ・ガンマ・彩度は1、コントラストは0）で、外部LUTのみが適用されます。パネル輝度は引き続き操作可能です。
-- `framecolor-lut install FILE [--restart]`、`disable [--restart]`、`status`、`validate FILE` を追加。導入前に検査し、旧ファイルはバックアップします。
+## 使い方
 
-導入例（改造版をビルド・インストールしたFrame上）：
+`.cube` ファイルを次のフォルダーに置きます。フォルダーがなければ、インストーラーまたはダッシュボードが作成します。
 
-```sh
-~/.local/bin/framecolor-lut install ~/quest-to-frame.cube
-~/.local/bin/framecolor-lut status
-~/.local/bin/framecolor-lut disable --restart
+```text
+~/Documents/FrameColor/luts/
 ```
 
-外部LUTモードで実行中なら、`install` 後にSteamVRを再起動する必要はありません。スライダーモードから外部LUTモードへ、またはその逆へ切り替える場合だけ再起動してください。
+ダッシュボード上部の「色補正LUT」で、ON/OFFボタンを押すと切り替わり、`<` `>` でファイルを選べます。ファイルを選ぶと自動的にONになります。フォルダーは2秒ごとに確認するので、ファイルを追加するとすぐ一覧に出ます。切り替えは1秒ほどで反映され、SteamVRの再起動は不要です。右上に「適用中」「OFF（元の色）」「エラー」などの状態が出ます。
 
-スライダーやプリセットが標準値以外だと測定結果が変わります。検証・測定時は「リセット」を選び、RGB調整を標準値にしてください。パネル輝度は測定時の値を維持してください。
+有効なLUTを基礎にして、明るさ・彩度・コントラスト・ガンマの調整を重ねます。測定値をそのまま使う場合は、RGB調整を標準値に戻してください。パネル輝度は別設定です。
 
-スライダーモードと外部LUTモードの切替にはSteamVR再起動が必要です。診断用LUT・恒等LUT・測定からの生成方法はVRColorの日本語READMEを参照してください。元のスライダー設定は保持します。アンインストール時にも測定LUTのバックアップは残します。
+対応する `.cube` はサイズ2〜65、ドメイン0〜1、有限なRGB値0〜1です。サイズの違うLUTはレイヤーのテクスチャサイズに合わせて補間します。16ビットの線形フィルターに対応しないGPUでは8ビット形式を使います。
 
-Windows上で新しいlook_transform.hppのホスト単体テストをMSVCで実行しました。g++ランナーと変更したVulkan処理の構文コンパイル、Frame上のビルド・実行、シェーダーの表示結果は未確認です。元プロジェクトのライセンス表記を保持しています。
+## コマンド
+
+```sh
+~/.local/bin/framecolor-lut list
+~/.local/bin/framecolor-lut select quest3-match-v1.cube
+~/.local/bin/framecolor-lut on
+~/.local/bin/framecolor-lut off
+~/.local/bin/framecolor-lut status
+~/.local/bin/framecolor-lut validate ~/my-measurement.cube
+~/.local/bin/framecolor-lut install ~/my-measurement.cube
+```
+
+`disable` は `off` の別名です。`install` はLUTを検査してライブラリにコピーし、選択して有効にします。`--restart` を明示した場合はSteamVRも再起動します。通常の選択・ON/OFF・インストールには必要ありません。
+
+`status` はダッシュボードからレイヤーへ渡す `lut.txt` と、レイヤーが書く `lut-status.txt` を表示します。読み込みに失敗した場合は現在のLUTを保ち、理由をステータスに表示します。
+
+## 旧形式からの移行
+
+インストール時に `~/.config/framecolor/external-lut.cube` があり、`lut.txt` がまだない場合、インストーラーはそのファイルをライブラリへコピーして選択状態を作成します。移行後も元ファイルは残ります。未移行の旧設定でも、`lut.txt` がなく旧ファイルが存在すればレイヤーは引き続き読み込みます。
+
+アンインストールでは `lut.txt` と `lut-status.txt` を削除します。ライブラリフォルダー、測定LUT、および旧形式のLUTは削除しません。
+
+## 検証時の注意
+
+プリセットやスライダーのRGB調整はLUT適用後の色を変えます。LUT単体を確認するときは「標準」プリセットに戻してください。パネル輝度は測定時の値を維持してください。
+
+元プロジェクトおよび第三者由来コードのライセンス表示はそのまま保持しています。

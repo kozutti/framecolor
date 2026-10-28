@@ -1,5 +1,6 @@
 #include "draw.h"
 #include "i18n.h"
+#include "lut_control.hpp"
 #include "openvr.h"
 #include "vr_overlay.h"
 
@@ -10,11 +11,13 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <iterator>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -23,7 +26,9 @@
 namespace {
 
 constexpr int kWidth = 1200;
-constexpr int kHeight = 700;
+constexpr int kHeight = 890;
+// The colour-LUT card sits under the title; everything below it moves down by this much.
+constexpr double kLutShift = 190;
 constexpr int kThumb = 256;
 constexpr const char* kFont = "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc";
 constexpr const char* kBold = "/usr/share/fonts/noto-cjk/NotoSansCJK-Bold.ttc";
@@ -58,7 +63,8 @@ struct Values {
 
 struct Preset { Values values; bool valid = false; };
 
-enum class HitKind { Slider, ChannelMenu, ChannelChoice, Preset, SaveMode, Reset, LanguageMenu, LanguageChoice };
+enum class HitKind { Slider, ChannelMenu, ChannelChoice, Preset, SaveMode, Reset, LanguageMenu, LanguageChoice,
+                     LutToggle, LutPrevious, LutNext };
 struct Hit { double x, y, w, h; HitKind kind; int arg; };
 
 struct UiState {
@@ -73,7 +79,13 @@ struct UiState {
     bool saveMode = false;
     bool lookDirty = false;
     bool vulkanLayerActive = false;
-    bool externalLut = false;
+    bool lutEnabled = false;
+    bool legacyLut = false;
+    std::string lutFile;
+    std::vector<std::string> lutFiles;
+    vkBasalt::LutStatus lutStatus;
+    bool lutPending = false;  // selection written; waiting for the layer to report it
+    std::chrono::steady_clock::time_point lutPendingSince{};
     std::string message;
     bool messageIsError = false;
 };
@@ -85,6 +97,7 @@ const std::array<Preset, 3> kBuiltins{{
 }};
 
 float getSetting(const char* key, float fallback) {
+    if (vr::VRSettings() == nullptr) return fallback;  // e.g. --render-png without SteamVR
     vr::EVRSettingsError error = vr::VRSettingsError_None;
     const float value = vr::VRSettings()->GetFloat("steamvr", key, &error);
     return error == vr::VRSettingsError_None ? value : fallback;
@@ -123,6 +136,117 @@ std::filesystem::path presetPath() {
 }
 
 std::filesystem::path currentPath() { return presetPath().parent_path() / "current.txt"; }
+
+std::filesystem::path lutControlPath() { return presetPath().parent_path() / "lut.txt"; }
+std::filesystem::path lutStatusPath() { return presetPath().parent_path() / "lut-status.txt"; }
+
+std::filesystem::path lutLibraryPath() {
+    const char* home = std::getenv("HOME");
+    return std::filesystem::path(home != nullptr ? home : "/tmp") / "Documents" / "FrameColor" / "luts";
+}
+
+bool hasCubeExtension(const std::string& name) {
+    if (name.size() < 5) return false;
+    std::string extension = name.substr(name.size() - 5);
+    std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return extension == ".cube";
+}
+
+std::vector<std::string> scanLutLibrary() {
+    const auto directory = lutLibraryPath();
+    std::error_code ec;
+    std::filesystem::create_directories(directory, ec);
+    std::vector<std::string> files;
+    std::filesystem::directory_iterator it(directory, ec), end;
+    for (; !ec && it != end; it.increment(ec)) {
+        const std::string name = it->path().filename().string();
+        if (name.empty() || name.front() == '.' || !hasCubeExtension(name)) continue;
+        std::error_code statusError;
+        if (it->symlink_status(statusError).type() != std::filesystem::file_type::regular || statusError) continue;
+        files.push_back(name);
+    }
+    std::sort(files.begin(), files.end());
+    if (files.size() > 64) files.resize(64);
+    return files;
+}
+
+bool saveLutSelection(const UiState& ui) {
+    if (!ui.lutFile.empty() && (!vkBasalt::isSafeLutBasename(ui.lutFile) || !hasCubeExtension(ui.lutFile)))
+        return false;
+    const auto path = lutControlPath();
+    std::error_code ec;
+    std::filesystem::create_directories(path.parent_path(), ec);
+    if (ec) return false;
+    const auto temporary = path.string() + ".tmp";
+    std::ofstream out(temporary, std::ios::trunc);
+    if (!out) return false;
+    out << "enabled " << (ui.lutEnabled ? '1' : '0') << '\n';
+    if (!ui.lutFile.empty()) out << "file " << ui.lutFile << '\n';
+    out.close();
+    if (!out) {
+        std::filesystem::remove(temporary, ec);
+        return false;
+    }
+    std::filesystem::rename(temporary, path, ec);
+    if (ec) std::filesystem::remove(temporary, ec);
+    return !ec;
+}
+
+void loadLutSelection(UiState& ui) {
+    std::ifstream input(lutControlPath());
+    if (input) {
+        const std::string contents((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+        const auto selection = vkBasalt::parseLutSelection(contents);
+        if (selection.valid) {
+            ui.lutEnabled = selection.enabled;
+            ui.lutFile = selection.file;
+        } else {
+            ui.lutStatus = {vkBasalt::LutStatusState::Error, {}, selection.error};
+        }
+    } else {
+        std::error_code ec;
+        const auto legacy = presetPath().parent_path() / "external-lut.cube";
+        if (std::filesystem::is_regular_file(legacy, ec) && !ec) {
+            ui.lutEnabled = true;
+            ui.lutFile = legacy.filename().string();
+            ui.legacyLut = true;
+        }
+    }
+}
+
+bool materializeLegacyLut(UiState& ui) {
+    if (!ui.legacyLut) return true;
+    const auto source = presetPath().parent_path() / "external-lut.cube";
+    const auto directory = lutLibraryPath();
+    std::error_code ec;
+    std::filesystem::create_directories(directory, ec);
+    if (ec) return false;
+    auto destination = directory / "migrated-external-lut.cube";
+    for (unsigned suffix = 2; std::filesystem::exists(destination, ec) && !ec; ++suffix)
+        destination = directory / ("migrated-external-lut-" + std::to_string(suffix) + ".cube");
+    std::filesystem::copy_file(source, destination, std::filesystem::copy_options::none, ec);
+    if (ec) return false;
+    ui.lutFile = destination.filename().string();
+    ui.legacyLut = false;
+    ui.lutFiles = scanLutLibrary();
+    return true;
+}
+
+void setLutSaveError(UiState& ui) {
+    ui.message = getTranslations(ui.language).lutWriteError;
+    ui.messageIsError = true;
+}
+
+void readLutStatus(UiState& ui) {
+    std::ifstream input(lutStatusPath());
+    if (!input) return;
+    const std::string contents((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+    vkBasalt::LutStatus status;
+    if (vkBasalt::parseLutStatus(contents, status) && status != ui.lutStatus)
+        ui.lutStatus = std::move(status);
+}
 
 void neutralizeLegacyStreamGains(UiState& ui) {
     // Earlier releases wrote these stream-only gains. Leave them neutral so
@@ -313,6 +437,70 @@ void slider(const Pen& p, std::vector<Hit>& hits, double y, const std::string& t
     if (usable) hits.push_back({kTrackX - 20, y + 8, kTrackW + 40, 62, HitKind::Slider, index});
 }
 
+bool lutStatusMatchesSelection(const UiState& ui) {
+    using vkBasalt::LutStatusState;
+    if (!ui.lutEnabled || ui.lutFile.empty()) return ui.lutStatus.state == LutStatusState::Off;
+    return ui.lutStatus.state != LutStatusState::Off && ui.lutStatus.file == ui.lutFile;
+}
+
+// Returns the status line and its colour for the colour-LUT card.
+std::pair<std::string, Color> lutStatusLine(const UiState& ui, const Translations& tr) {
+    using vkBasalt::LutStatusState;
+    if (!ui.vulkanLayerActive) return {tr.lutLayerInactive, kMuted};
+    if (ui.lutPending) return {tr.lutPending, kMuted};
+    std::string text;
+    Color color = kMuted;
+    switch (ui.lutStatus.state) {
+        case LutStatusState::Active: text = tr.lutStatusActive; color = kGreen; break;
+        case LutStatusState::Off: text = tr.lutStatusOff; break;
+        case LutStatusState::Error: text = tr.lutStatusError; color = kRed; break;
+        case LutStatusState::Unsupported: text = tr.lutStatusUnsupported; color = kRed; break;
+    }
+    if (ui.lutStatus.state != LutStatusState::Off && !ui.lutStatus.message.empty() && ui.lutStatus.message != "-")
+        text += " (" + ui.lutStatus.message + ")";
+    return {text, color};
+}
+
+// Shortens text with a trailing ellipsis until it fits in width.
+std::string fitText(const Pen& p, std::string text, double size, double width) {
+    if (p.measure(text, size, true) <= width) return text;
+    while (!text.empty()) {
+        // Drop one UTF-8 code point: continuation bytes first, then the lead byte.
+        while (!text.empty() && (static_cast<unsigned char>(text.back()) & 0xC0) == 0x80) text.pop_back();
+        if (!text.empty()) text.pop_back();
+        if (p.measure(text + "…", size, true) <= width) return text + "…";
+    }
+    return "…";
+}
+
+void lutCard(const Pen& p, std::vector<Hit>& hits, const UiState& ui, const Translations& tr,
+             double pointerX, double pointerY) {
+    const double y = 92;
+    const bool usable = ui.vulkanLayerActive;
+    const bool hasFiles = !ui.lutFiles.empty();
+    fillRect(p, 45, y, 1110, 172, kCard);
+    p.text(70, y + 40, tr.measuredLut, 25, usable ? kText : kMuted, true);
+    const auto [statusText, statusColor] = lutStatusLine(ui, tr);
+    p.text(1130, y + 40, fitText(p, statusText, 21, 760), 21, statusColor, true, true);
+
+    button(p, hits, 70, y + 62, 160, 60, ui.lutEnabled ? tr.lutOn : tr.lutOff, HitKind::LutToggle, 0,
+           ui.lutEnabled && usable, usable && (hasFiles || !ui.lutFile.empty()), pointerX, pointerY);
+    button(p, hits, 250, y + 62, 64, 60, "<", HitKind::LutPrevious, 0, false, usable && hasFiles,
+           pointerX, pointerY);
+    button(p, hits, 1066, y + 62, 64, 60, ">", HitKind::LutNext, 0, false, usable && hasFiles,
+           pointerX, pointerY);
+
+    // File name field (not clickable; the arrows change it)
+    const double fieldX = 324, fieldW = 732;
+    fillRect(p, fieldX, y + 62, fieldW, 60, kBg);
+    strokeRect(p, fieldX, y + 62, fieldW, 60, kBorder);
+    std::string name = !ui.lutFile.empty() ? ui.lutFile : (hasFiles ? tr.lutNoSelection : tr.lutNoFiles);
+    const bool showingFile = !ui.lutFile.empty();
+    name = fitText(p, name, 22, fieldW - 40);
+    p.text(fieldX + 20, y + 100, name, 22, showingFile && usable ? kText : kMuted, showingFile);
+    p.text(70, y + 156, fitText(p, tr.lutFolderHint, 18, 1060), 18, kMuted);
+}
+
 double selectedGain(const UiState& ui) {
     if (ui.channel == 1) return ui.values.red;
     if (ui.channel == 2) return ui.values.green;
@@ -366,7 +554,7 @@ void updateSlider(UiState& ui, int index, double pointerX) {
 }
 
 void render(const FontSet& fonts, const UiState& ui, double pointerX, double pointerY,
-            std::vector<uint8_t>& rgba, std::vector<Hit>& hits) {
+            std::vector<uint8_t>& rgba, std::vector<Hit>& hits, const char* pngPath = nullptr) {
     cairo_surface_t* surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, kWidth, kHeight);
     cairo_t* cr = cairo_create(surface); Pen p{cr, &fonts};
     cairo_set_source_rgb(cr, kBg.r, kBg.g, kBg.b); cairo_paint(cr);
@@ -384,6 +572,9 @@ void render(const FontSet& fonts, const UiState& ui, double pointerX, double poi
     button(p, hits, langBtnX, langBtnY, langBtnW, langBtnH, langLabel,
            HitKind::LanguageMenu, 0, ui.languageOpen, true, pointerX, pointerY);
 
+    lutCard(p, hits, ui, tr, pointerX, pointerY);
+
+    const double d = kLutShift;
     const std::array<std::string, 6> names{{
         tr.builtinPresets[0],
         tr.builtinPresets[1],
@@ -394,38 +585,38 @@ void render(const FontSet& fonts, const UiState& ui, double pointerX, double poi
         const bool valid = i < 3 || ui.custom[i - 3].valid;
         std::string label = names[i];
         if (i >= 3 && !valid) label += tr.emptySlotSuffix;
-        button(p, hits, 45 + i * 137, 101, 125, 48, label, HitKind::Preset, i, false,
+        button(p, hits, 45 + i * 137, d + 101, 125, 48, label, HitKind::Preset, i, false,
                !ui.saveMode || i >= 3, pointerX, pointerY);
     }
-    button(p, hits, 885, 101, 125, 48, ui.saveMode ? tr.selectSlot : tr.save, HitKind::SaveMode, 0,
+    button(p, hits, 885, d + 101, 125, 48, ui.saveMode ? tr.selectSlot : tr.save, HitKind::SaveMode, 0,
            ui.saveMode, true, pointerX, pointerY);
-    button(p, hits, 1025, 101, 130, 48, ui.resetConfirm ? tr.resetConfirm : tr.reset,
+    button(p, hits, 1025, d + 101, 130, 48, ui.resetConfirm ? tr.resetConfirm : tr.reset,
            HitKind::Reset, 0, ui.resetConfirm, true, pointerX, pointerY);
 
-    slider(p, hits, 174, tr.panelBrightness, ui.values.panel, 0.40, 1.25, 0, true);
+    slider(p, hits, d + 174, tr.panelBrightness, ui.values.panel, 0.40, 1.25, 0, true);
 
-    p.text(45, 289, tr.adjustmentChannel, 22, kText, true);
-    button(p, hits, 885, 251, 270, 54, std::string(tr.channelNames[ui.channel]) + "    v",
+    p.text(45, d + 289, tr.adjustmentChannel, 22, kText, true);
+    button(p, hits, 885, d + 251, 270, 54, std::string(tr.channelNames[ui.channel]) + "    v",
            HitKind::ChannelMenu, 0, ui.channelOpen, true, pointerX, pointerY);
 
-    slider(p, hits, 320, tr.brightness, selectedGain(ui), 0.50, 1.50, 1, ui.vulkanLayerActive);
-    slider(p, hits, 410, tr.saturation, selectedArrayValue(ui.values.saturation, ui.channel),
+    slider(p, hits, d + 320, tr.brightness, selectedGain(ui), 0.50, 1.50, 1, ui.vulkanLayerActive);
+    slider(p, hits, d + 410, tr.saturation, selectedArrayValue(ui.values.saturation, ui.channel),
            0.0, 2.0, 4, ui.vulkanLayerActive);
-    slider(p, hits, 500, tr.contrast,
+    slider(p, hits, d + 500, tr.contrast,
            selectedArrayValue(ui.values.channelContrast, ui.channel), 0.0, 1.0, 2, ui.vulkanLayerActive);
-    slider(p, hits, 590, tr.gamma,
+    slider(p, hits, d + 590, tr.gamma,
            selectedArrayValue(ui.values.gamma, ui.channel), 0.50, 2.50, 3, ui.vulkanLayerActive);
 
     if (!ui.message.empty()) {
-        p.text(45, 680, ui.message, 20, ui.messageIsError ? kRed : kGreen);
+        p.text(45, d + 680, ui.message, 20, ui.messageIsError ? kRed : kGreen);
     }
 
     // Dropdown popups are rendered last so they appear on top and hit-test first
     if (ui.channelOpen) {
-        fillRect(p, 885, 307, 270, 224, kBg, 10);
-        strokeRect(p, 885, 307, 270, 224, kAccent, 10);
+        fillRect(p, 885, d + 307, 270, 224, kBg, 10);
+        strokeRect(p, 885, d + 307, 270, 224, kAccent, 10);
         for (int i = 0; i < 4; ++i) {
-            button(p, hits, 895, 317 + i * 51, 250, 43, tr.channelNames[i], HitKind::ChannelChoice, i,
+            button(p, hits, 895, d + 317 + i * 51, 250, 43, tr.channelNames[i], HitKind::ChannelChoice, i,
                    ui.channel == i, true, pointerX, pointerY);
         }
     }
@@ -447,6 +638,7 @@ void render(const FontSet& fonts, const UiState& ui, double pointerX, double poi
         }
     }
 
+    if (pngPath != nullptr) cairo_surface_write_to_png(surface, pngPath);
     surfaceToRgba(surface, rgba); cairo_destroy(cr); cairo_surface_destroy(surface);
 }
 
@@ -538,12 +730,75 @@ void activate(const Hit& hit, double x, UiState& ui, VrOverlay& overlay) {
                 ui.saveMode = false;
             }
             break;
+        case HitKind::LutToggle:
+        case HitKind::LutPrevious:
+        case HitKind::LutNext: {
+            ui.channelOpen = false;
+            ui.languageOpen = false;
+            ui.resetConfirm = false;
+            if (!materializeLegacyLut(ui)) {
+                setLutSaveError(ui);
+                break;
+            }
+            const std::string previousFile = ui.lutFile;
+            const bool previousEnabled = ui.lutEnabled;
+            if (hit.kind == HitKind::LutToggle) {
+                ui.lutEnabled = !ui.lutEnabled;
+                // Turning on with nothing selected picks the first file in the folder.
+                if (ui.lutEnabled && ui.lutFile.empty() && !ui.lutFiles.empty()) ui.lutFile = ui.lutFiles.front();
+            } else {
+                if (ui.lutFiles.empty()) break;
+                const auto current = std::find(ui.lutFiles.begin(), ui.lutFiles.end(), ui.lutFile);
+                int index = current == ui.lutFiles.end() ? -1 : static_cast<int>(current - ui.lutFiles.begin());
+                const int count = static_cast<int>(ui.lutFiles.size());
+                if (hit.kind == HitKind::LutPrevious)
+                    index = index < 0 ? count - 1 : (index + count - 1) % count;
+                else
+                    index = index < 0 ? 0 : (index + 1) % count;
+                ui.lutFile = ui.lutFiles[static_cast<std::size_t>(index)];
+                ui.lutEnabled = true;  // choosing a file implies ON
+            }
+            if (!saveLutSelection(ui)) {
+                ui.lutFile = previousFile;
+                ui.lutEnabled = previousEnabled;
+                setLutSaveError(ui);
+                break;
+            }
+            ui.lutPending = !lutStatusMatchesSelection(ui);
+            ui.lutPendingSince = std::chrono::steady_clock::now();
+            ui.message.clear();
+            break;
+        }
     }
+}
+
+void loadUiState(UiState& ui) {
+    ui.language = loadSavedLanguage(presetPath().parent_path());
+    readValues(ui.values); loadAdvancedValues(ui.values); loadCustomPresets(ui);
+    const char* dataHome = std::getenv("XDG_DATA_HOME");
+    const char* home = std::getenv("HOME");
+    const std::filesystem::path dataRoot = dataHome && *dataHome ? dataHome :
+        std::filesystem::path(home ? home : "/tmp") / ".local/share";
+    ui.vulkanLayerActive = std::filesystem::exists(dataRoot / "framecolor/layer/vkBasalt.json");
+    ui.lutFiles = scanLutLibrary();
+    loadLutSelection(ui);
+    readLutStatus(ui);
 }
 
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
+    // Development aid: `framecolor --render-png out.png [en|ja]` draws the panel
+    // from the current settings without SteamVR.
+    if (argc >= 3 && std::string(argv[1]) == "--render-png") {
+        FontSet fonts; fonts.load(kFont, kBold);
+        UiState ui;
+        loadUiState(ui);
+        if (argc >= 4) ui.language = std::string(argv[3]) == "ja" ? Language::Japanese : Language::English;
+        std::vector<uint8_t> pixels; std::vector<Hit> hits;
+        render(fonts, ui, -1, -1, pixels, hits, argv[2]);
+        return 0;
+    }
     signal(SIGINT, stopHandler); signal(SIGTERM, stopHandler);
     VrOverlay overlay; std::string error;
     while (!gStop) {
@@ -556,18 +811,13 @@ int main() {
     FontSet fonts; fonts.load(kFont, kBold);
     std::vector<uint8_t> pixels; thumbnail(fonts, pixels); overlay.submitThumbnail(pixels.data(), kThumb);
     UiState ui;
-    ui.language = loadSavedLanguage(presetPath().parent_path());
+    loadUiState(ui);
     overlay.setOverlayName(getTranslations(ui.language).dashboardName);
-    readValues(ui.values); loadAdvancedValues(ui.values); loadCustomPresets(ui);
-    const char* dataHome = std::getenv("XDG_DATA_HOME");
-    const char* home = std::getenv("HOME");
-    const std::filesystem::path dataRoot = dataHome && *dataHome ? dataHome :
-        std::filesystem::path(home ? home : "/tmp") / ".local/share";
-    ui.vulkanLayerActive = std::filesystem::exists(dataRoot / "framecolor/layer/vkBasalt.json");
-    ui.externalLut = std::filesystem::exists(presetPath().parent_path() / "external-lut.cube");
     setSetting("contrast", 0.0, ui);
     neutralizeLegacyStreamGains(ui);
     auto lastLookSave = std::chrono::steady_clock::now();
+    auto nextLutScan = lastLookSave + std::chrono::seconds(2);
+    auto nextLutStatus = lastLookSave + std::chrono::milliseconds(500);
     std::vector<Hit> hits; double px = -1, py = -1; bool dirty = true; bool wasVisible = false;
     while (!gStop && overlay.steamVrAlive()) {
         const VrEvents events = overlay.pollEvents();
@@ -594,6 +844,24 @@ int main() {
             }
         }
         const auto now = std::chrono::steady_clock::now();
+        if (now >= nextLutScan) {
+            const auto previousFiles = ui.lutFiles;
+            ui.lutFiles = scanLutLibrary();
+            if (ui.lutFiles != previousFiles) dirty = true;
+            nextLutScan = now + std::chrono::seconds(2);
+        }
+        if (now >= nextLutStatus || (ui.lutPending && now - ui.lutPendingSince >= std::chrono::milliseconds(150))) {
+            const auto previousStatus = ui.lutStatus;
+            readLutStatus(ui);
+            if (ui.lutStatus != previousStatus) dirty = true;
+            // Stop showing "switching" once the layer reports the new selection,
+            // or after 3 s so a missing layer cannot leave it stuck.
+            if (ui.lutPending && (lutStatusMatchesSelection(ui) || now - ui.lutPendingSince >= std::chrono::seconds(3))) {
+                ui.lutPending = false;
+                dirty = true;
+            }
+            nextLutStatus = now + std::chrono::milliseconds(ui.lutPending ? 150 : 500);
+        }
         if (ui.vulkanLayerActive && ui.lookDirty &&
             (ui.activeSlider < 0 || now - lastLookSave >= std::chrono::milliseconds(150))) {
             if (saveAdvancedValues(ui)) {

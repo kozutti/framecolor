@@ -27,4 +27,5 @@ vkBasalt_src = [
 ]
 
 shared_library('vkbasalt', vkBasalt_src, shader_include,
+    dependencies: dependency('threads'),
     gnu_symbol_visibility: 'hidden', install : false)

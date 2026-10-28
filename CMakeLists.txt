@@ -23,7 +23,7 @@ add_executable(framecolor
   src/vk_texture.cpp
   src/vr_overlay.cpp
 )
-target_include_directories(framecolor PRIVATE third_party/openvr)
+target_include_directories(framecolor PRIVATE third_party/openvr third_party/vkbasalt/src)
 target_compile_options(framecolor PRIVATE -Wall -Wextra)
 target_link_libraries(framecolor PRIVATE
   PkgConfig::CAIRO
