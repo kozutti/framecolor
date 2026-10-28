@@ -44,3 +44,7 @@ Values are for 36 check colors that were not used to compute the LUT. The uncorr
 - Changing the panel brightness far from the measured value changes how well it matches.
 - Colors the Frame cannot show (out of gamut) and brightness differences remain.
 - Treat this LUT as a starting point. Switch it off if it looks wrong to you.
+
+### License
+
+The LUT data is provided under the same [MIT license](../LICENSE) as this repository.

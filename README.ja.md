@@ -145,6 +145,8 @@ FrameColorは非公式ツールです．また，ベータ版です．SteamVRや
 
 このツールはCodexを利用して作成しました．動作確認は行っていますが，自己責任でお使いください．
 
+このフォークでの変更は，ClaudeとCodexを利用して作成しました．このフォークは，元の作者，Valve，Metaのいずれとも関係ありません．Steam FrameとQuestは，それぞれの所有者の商標です．
+
 ## 開発
 
 ソースからのビルドはSteam Frame上で行います．CMake，Meson，Ninja，pkg-config，`glslangValidator`，Cairo・FreeType・Vulkanの開発用ファイル，およびSteamVRに付属する `libopenvr_api.so` が必要です．配布アーカイブの作成には `strip`，`tar`，`sha256sum` も使います．
@@ -162,5 +164,7 @@ sh contrib/package.sh VERSION        # dist/ にアーカイブと.sha256を生�
 ## 謝辞
 
 ダッシュボード関連のコードとデザインは [frameeyeosc](https://github.com/sasaken1102r/frameeyeosc) を参考・改変しています．オーバーレイには [OpenVR](https://github.com/ValveSoftware/openvr) のヘッダーを使用し，表示色の補正には [vkBasalt](https://github.com/DadSchoorse/vkBasalt) の改変版を使用しています．作者と貢献者の皆さまに感謝します．
+
+このフォークは，beko-kerbecottonさんの [FrameColor](https://github.com/beko-kerbecotton/framecolor) を元にし，brugrさんのPR #1・#2を取り込んでいます．ありがとうございます．
 
 FrameColor独自部分は [MITライセンス](LICENSE) です．第三者由来コードの詳細とライセンス原文は [サードパーティーに関する表示](THIRD_PARTY_LICENSES.ja.md) を参照してください．

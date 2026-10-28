@@ -145,6 +145,8 @@ This version supports only the stock SteamVR installation at `/opt/steamvr`. If 
 
 This tool was created with the assistance of Codex. It has been tested, but you use it at your own risk.
 
+This fork's changes were made with the assistance of Claude and Codex. This fork is not affiliated with the original author, Valve, or Meta. Steam Frame and Quest are trademarks of their respective owners.
+
 ## Development
 
 Build from source on the Steam Frame. You need CMake, Meson, Ninja, pkg-config, `glslangValidator`, development files for Cairo, FreeType, and Vulkan, and the `libopenvr_api.so` included with SteamVR. Creating a release archive also uses `strip`, `tar`, and `sha256sum`.
@@ -162,5 +164,7 @@ If prebuilt binaries are not included, `contrib/install.sh` builds them from sou
 ## Acknowledgments
 
 The dashboard code and design are adapted from [frameeyeosc](https://github.com/sasaken1102r/frameeyeosc). The overlay uses headers from [OpenVR](https://github.com/ValveSoftware/openvr), and display color correction uses a modified version of [vkBasalt](https://github.com/DadSchoorse/vkBasalt). Thanks to their authors and contributors.
+
+This fork is based on [FrameColor](https://github.com/beko-kerbecotton/framecolor) by beko-kerbecotton and includes pull requests #1 and #2 by brugr. Thank you.
 
 FrameColor's original code is available under the [MIT license](LICENSE). See [Third-party notices](THIRD_PARTY_LICENSES.md) for details about third-party code and the original license texts.

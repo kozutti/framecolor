@@ -30,6 +30,12 @@ FrameColorでは対象を `vrcompositor` に限定し，ユーザー設定に応
 更新します．また，使用しないエフェクト，入力フック，深度キャプチャ，
 画像ローダー，ReShadeコンパイラーの機能を除いています．
 
+この非公式フォークでは，さらにレイヤーを改変しています．LUTフォルダーからの
+ファイル選択，実行中のON/OFF切り替え，別スレッドでの読み込み，レイヤーの
+LUTサイズへの補間を追加しました（`effect_lut.*`，`lut_cube.*`，`meson.build`）．
+`look_transform.hpp`，`stable_file_change.hpp`，`lut_control.hpp` は
+FrameColorで新しく書いたコードで，MITライセンスです．
+
 ソースと配布用アーカイブには，NVIDIA FXAA，AMD CAS，SMAA，DLS，ReShade
 コンパイラー，stb画像ローダー，SPIRV-Headersのファイルは含まれません．
 残した二つのGLSLシェーダーはvkBasalt由来です．

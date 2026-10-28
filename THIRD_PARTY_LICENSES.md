@@ -26,6 +26,13 @@ limits the layer to `vrcompositor`, updates the LUT from user settings, and
 removes unused effects, input hooks, depth capture, image loaders, and
 ReShade compiler support.
 
+This unofficial fork alters the layer further: it selects LUT files from a
+library folder, switches them on and off at run time, loads them on a worker
+thread, and resamples them to the layer's LUT size (`effect_lut.*`,
+`lut_cube.*`, `meson.build`). The headers `look_transform.hpp`,
+`stable_file_change.hpp`, and `lut_control.hpp` are new FrameColor code under
+the MIT license.
+
 The source and binary release contain no NVIDIA FXAA, AMD CAS, SMAA, DLS,
 ReShade compiler, stb image loader, or SPIRV-Headers files. The two retained
 GLSL shaders are from vkBasalt.
