@@ -48,7 +48,7 @@ sh ~/.local/share/framecolor-package/contrib/uninstall.sh
 
 ### Manual installation
 
-Download `framecolor-VERSION-steamframe-aarch64.tar.gz` from GitHub Releases. If you want to verify its checksum, also download the matching `.sha256` file. Replace `VERSION` and `FRAME_IP` below with the release version and your Steam Frame's IP address.
+Download `framecolor-VERSION-steamframe-aarch64.tar.gz` from GitHub Releases. (Each release also has `framecolor-steamframe-aarch64.tar.gz` without the version. It is the same file, named that way so the one-line installer can fetch the latest release; either one works.) If you want to verify its checksum, also download the matching `.sha256` file. Replace `VERSION` and `FRAME_IP` below with the release version and your Steam Frame's IP address.
 
 From your PC, copy the archive to the Steam Frame's home directory:
 

@@ -48,7 +48,7 @@ sh ~/.local/share/framecolor-package/contrib/uninstall.sh
 
 ### 手動でインストールする場合
 
-GitHub Releasesから `framecolor-VERSION-steamframe-aarch64.tar.gz` を入手してください．チェックサムを確認する場合は，同名の `.sha256` ファイルも入手します．以下の `VERSION` と `FRAME_IP` は，ダウンロードした版とSteam FrameのIPアドレスに置き換えます．
+GitHub Releasesから `framecolor-VERSION-steamframe-aarch64.tar.gz` を入手してください．（各リリースには，バージョンのない `framecolor-steamframe-aarch64.tar.gz` もあります．中身は同じで，1行インストールが最新版を取得できるように名前を固定してあるだけです．どちらでも使えます．）チェックサムを確認する場合は，同名の `.sha256` ファイルも入手します．以下の `VERSION` と `FRAME_IP` は，ダウンロードした版とSteam FrameのIPアドレスに置き換えます．
 
 PCからSteam Frameのホームディレクトリに転送します．
 
